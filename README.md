@@ -1,12 +1,32 @@
-# React + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NutriCare - Malnutrition Project</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    h1 { color: #2a9d8f; }
+    .card { background: #f4f4f4; padding: 20px; border-radius: 10px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🌍 NutriCare</h1>
+  <p><b>Goal:</b> Track, identify and treat malnutrition in children aged 1-5 years, and provide healthcare workers with actionable data.</p>
+  
+  <div class="card">
+    <h2>API</h2>
+    <p>Live at: <a href="https://malnutrition-api.onrender.com/docs" target="_blank">API Docs</a></p>
+  </div>
+  
+  <div class="card">
+    <h2>Telegram Bot</h2>
+    <p>Talk to our AI assistant via Telegram to register and assess children.</p>
+  </div>
+  
+  <div class="card">
+    <h2>Team</h2>
+    <p>Built by a passionate team to improve child health in Africa.</p>
+  </div>
+</body>
+</html>
