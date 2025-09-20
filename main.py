@@ -10,6 +10,10 @@ load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Not strictly needed by backend, but safe to keep
 
 app = FastAPI()
+@app.get("/")
+def root():
+    return {"message": "NutriCare API is live!"}
+
 
 # Allow frontend + bot requests
 app.add_middleware(
@@ -74,3 +78,4 @@ def add_patient(patient: Patient):
 @app.get("/patients", response_model=List[dict])
 def get_patients():
     return patients_db
+
