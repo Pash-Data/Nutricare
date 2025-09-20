@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 from telegram import Update, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Load token from .env
+# Load token from environment (do NOT push .env to GitHub)
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Backend API URL
-API_URL = "http://127.0.0.1:8000/patients"
+API_URL = "https://nutricare-nvw0.onrender.com"
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -44,11 +44,16 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "muac_mm": float(muac)
         }
 
-        response = requests.post(API_URL, json=payload)
+        response = requests.post(f"{API_URL}/patients", json=payload)
         data = response.json()
-        await update.message.reply_text(
-            f"✅ Added: {data['data']['name']} ({data['data']['nutrition_status']})"
-        )
+
+        if "data" in data:
+            patient_info = data['data']
+            await update.message.reply_text(
+                f"✅ Added: {patient_info['name']} ({patient_info['nutrition_status']})"
+            )
+        else:
+            await update.message.reply_text(f"❌ API returned unexpected response: {data}")
 
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
@@ -56,12 +61,12 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /summary command
 async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        response = requests.get(API_URL)
+        response = requests.get(f"{API_URL}/patients")
         patients = response.json()
         if not patients:
             await update.message.reply_text("📭 No patients yet.")
             return
-        
+
         total = len(patients)
         sam = sum(1 for p in patients if p["nutrition_status"] == "SAM")
         mam = sum(1 for p in patients if p["nutrition_status"] == "MAM")
@@ -91,7 +96,7 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"💡 Recommendation: {recommendation}\n"
                 "----------------------"
             )
-        
+
         msg = "\n".join(msg_lines)
         await update.message.reply_text(msg)
 
@@ -101,13 +106,12 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /export command
 async def export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        response = requests.get(API_URL)
+        response = requests.get(f"{API_URL}/patients")
         patients = response.json()
         if not patients:
             await update.message.reply_text("📭 No patients to export.")
             return
 
-        # Save to CSV
         filename = "patients_export.csv"
         with open(filename, mode="w", newline="") as file:
             writer = csv.DictWriter(
@@ -117,7 +121,6 @@ async def export(update: Update, context: ContextTypes.DEFAULT_TYPE):
             writer.writeheader()
             writer.writerows(patients)
 
-        # Send file back to user
         with open(filename, "rb") as file:
             await update.message.reply_document(InputFile(file, filename))
 
