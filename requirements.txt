@@ -3,5 +3,7 @@ uvicorn==0.23.2
 requests>=2.31.0,<3
 python-dotenv==1.0.0
 pydantic==2.6.1
-python-telegram-bot==20.3  # prebuilt wheel
+python-telegram-bot==20.3 
+# prebuilt wheel
+
 
