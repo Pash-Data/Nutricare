@@ -5,20 +5,20 @@ from dotenv import load_dotenv
 from telegram import Update, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Load token from .env
+# Load environment variables
 load_dotenv()
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Backend API URL
-API_URL = "https://YOUR_RENDER_BACKEND_URL"  # Replace with your deployed backend URL
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+API_URL = os.getenv("API_URL")  # Set on Render
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to Nutricare Bot!\n\n"
         "To register a child, use:\n"
-        "/add Name Age Weight(kg) Height(cm) MUAC(mm)\n"
-        "Example: /add John 5 15 100 120\n\n"
+        "/add Name Age Weight(kg) Height(cm) MUAC(mm)\n\n"
+        "Example:\n"
+        "/add John 5 15 100 120\n\n"
         "Use /summary to see patient records.\n"
         "Use /export to download all records as CSV."
     )
@@ -43,8 +43,9 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "muac_mm": float(muac)
         }
 
-        response = requests.post(f"{API_URL}/patients", json=payload)
+        response = requests.post(API_URL + "/patients", json=payload)
         data = response.json()
+
         if "data" in data:
             await update.message.reply_text(
                 f"✅ Added: {data['data']['name']} ({data['data']['nutrition_status']})"
@@ -58,7 +59,7 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /summary command
 async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        response = requests.get(f"{API_URL}/patients")
+        response = requests.get(API_URL + "/patients")
         patients = response.json()
         if not patients:
             await update.message.reply_text("📭 No patients yet.")
@@ -70,7 +71,7 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
         normal = sum(1 for p in patients if p["nutrition_status"] == "Normal")
 
         header = (
-            f"📊 Nutricare Summary\n"
+            f"📊 **Nutricare Summary**\n"
             f"👥 Total patients: {total}\n"
             f"🚨 SAM: {sam} | ⚠️ MAM: {mam} | ✅ Normal: {normal}\n"
             "======================"
@@ -102,7 +103,7 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /export command
 async def export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        response = requests.get(f"{API_URL}/patients")
+        response = requests.get(API_URL + "/patients")
         patients = response.json()
         if not patients:
             await update.message.reply_text("📭 No patients to export.")
@@ -123,7 +124,7 @@ async def export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
-# Run bot
+# Build and run bot
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("add", add))
