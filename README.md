@@ -24,11 +24,3 @@ Nutricare/
 └─ bot.py # Telegram bot
 
 ---
-
-## **Setup Instructions**
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/Nutricare.git
-cd Nutricare
