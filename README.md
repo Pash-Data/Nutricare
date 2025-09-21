@@ -1,25 +1,24 @@
-# Nutricare – Malnutrition Tracking API & Telegram Bot
+# Nutricare App
 
-Nutricare is an app that helps healthcare workers in rural areas track, identify, and manage child malnutrition.  
-It provides:
-- **FastAPI backend** to register patients and calculate nutrition status
-- **Telegram bot** for quick data entry and summary reports
-- **CSV export** for patient data
-- **Dashboard integration** (future feature)
+Nutricare is a **child malnutrition tracking system** designed for primary healthcare workers. It consists of a FastAPI backend, a Telegram bot for quick patient registration, and optional web dashboard (React) integration.
 
 ---
 
-## 🚀 Features
-- Add patient data (Name, Age, Weight, Height, MUAC)
-- Calculate **BMI**, **build category**, and **malnutrition status**
-- Retrieve patient summaries
-- Export patients as **CSV file** via Telegram
+## **Features**
+
+- Register children with age, weight, height, and MUAC.
+- Automatically calculate BMI, build, and nutrition status (SAM/MAM/Normal).
+- Summarize patient data.
+- Export all patient records as CSV via Telegram.
+- FastAPI backend for data storage and retrieval.
 
 ---
 
-## ⚙️ Setup Instructions
+## **Project Structure**
 
-### 1. Clone Repository
-```bash
-git clone https://github.com/Pash-Data/Malnutrition-api.git
-cd Malnutrition-api
+Nutricare/
+├─ .gitignore
+├─ README.md
+├─ requirements.txt
+├─ main.py # FastAPI backend
+└─ bot.py # Telegram bot
