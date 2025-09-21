@@ -3,11 +3,16 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.env
+*.env
 
-# VSCode
-.vscode/
+# Virtual environment
+.venv/
+env/
+venv/
 
-# Render / deployment
+# Logs
 *.log
-*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
