@@ -5,21 +5,20 @@ from dotenv import load_dotenv
 from telegram import Update, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Load token from environment (do NOT push .env to GitHub)
+# Load token from .env
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Backend API URL
-API_URL = "https://nutricare-nvw0.onrender.com"
+API_URL = "https://YOUR_RENDER_BACKEND_URL"  # Replace with your deployed backend URL
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to Nutricare Bot!\n\n"
         "To register a child, use:\n"
-        "/add Name Age Weight(kg) Height(cm) MUAC(mm)\n\n"
-        "Example:\n"
-        "/add John 5 15 100 120\n\n"
+        "/add Name Age Weight(kg) Height(cm) MUAC(mm)\n"
+        "Example: /add John 5 15 100 120\n\n"
         "Use /summary to see patient records.\n"
         "Use /export to download all records as CSV."
     )
@@ -46,11 +45,9 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         response = requests.post(f"{API_URL}/patients", json=payload)
         data = response.json()
-
         if "data" in data:
-            patient_info = data['data']
             await update.message.reply_text(
-                f"✅ Added: {patient_info['name']} ({patient_info['nutrition_status']})"
+                f"✅ Added: {data['data']['name']} ({data['data']['nutrition_status']})"
             )
         else:
             await update.message.reply_text(f"❌ API returned unexpected response: {data}")
@@ -73,7 +70,7 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
         normal = sum(1 for p in patients if p["nutrition_status"] == "Normal")
 
         header = (
-            f"📊 **Nutricare Summary**\n"
+            f"📊 Nutricare Summary\n"
             f"👥 Total patients: {total}\n"
             f"🚨 SAM: {sam} | ⚠️ MAM: {mam} | ✅ Normal: {normal}\n"
             "======================"
@@ -97,8 +94,7 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "----------------------"
             )
 
-        msg = "\n".join(msg_lines)
-        await update.message.reply_text(msg)
+        await update.message.reply_text("\n".join(msg_lines))
 
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
@@ -127,7 +123,7 @@ async def export(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
-# Build and run bot
+# Run bot
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("add", add))
