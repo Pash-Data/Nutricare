@@ -1,0 +1,16 @@
+# Ignore environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code settings
+.vscode/
+
+# Node/React stuff (if you add frontend later)
+node_modules/
+build/
+dist/
