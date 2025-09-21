@@ -7,13 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
 load_dotenv()
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Not strictly needed by backend, but safe to keep
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Not required by backend, just safe to keep
 
 app = FastAPI()
-@app.get("/")
-def root():
-    return {"message": "NutriCare API is live!"}
-
 
 # Allow frontend + bot requests
 app.add_middleware(
@@ -29,7 +25,7 @@ class Patient(BaseModel):
     age: int
     weight_kg: float
     height_cm: float
-    muac_mm: float  # For malnutrition screening
+    muac_mm: float
 
 patients_db = []
 
@@ -53,9 +49,9 @@ def classify_build(bmi):
 
 def classify_muac(muac):
     if muac < 115:
-        return "SAM"  # Severe Acute Malnutrition
+        return "SAM"
     elif muac < 125:
-        return "MAM"  # Moderate Acute Malnutrition
+        return "MAM"
     else:
         return "Normal"
 
@@ -64,18 +60,19 @@ def classify_muac(muac):
 def add_patient(patient: Patient):
     bmi = calculate_bmi(patient.weight_kg, patient.height_cm)
     build = classify_build(bmi)
-    nutrition_status = classify_muac(patient.muac_mm)
+    muac_status = classify_muac(patient.muac_mm)
 
-    patient_data = patient.dict()
-    patient_data.update({
+    patient_dict = patient.dict()
+    patient_dict.update({
         "bmi": bmi,
         "build": build,
-        "nutrition_status": nutrition_status
+        "nutrition_status": muac_status
     })
-    patients_db.append(patient_data)
-    return {"status": "success", "data": patient_data}
+
+    patients_db.append(patient_dict)
+
+    return {"status": "success", "data": patient_dict}
 
 @app.get("/patients", response_model=List[dict])
 def get_patients():
     return patients_db
-
