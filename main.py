@@ -25,8 +25,11 @@ class Patient(BaseModel):
     weight_kg: float
     height_cm: float
     muac_mm: float
+    bmi: float
+    build: str
+    nutrition_status: str
 
-patients_db = []
+patients_db: List[PatientResponse] = []
 
 # Utility functions
 def calculate_bmi(weight, height):
@@ -82,4 +85,5 @@ def root():
 @app.get("/patients", response_model=List[dict])
 def get_patients():
     return patients_db
+
 
