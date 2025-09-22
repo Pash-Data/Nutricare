@@ -5,12 +5,10 @@ from pydantic import BaseModel
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 
-# Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
-# Allow frontend + bot requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,13 +16,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Data model
+# Pydantic models
 class Patient(BaseModel):
     name: str
     age: int
     weight_kg: float
     height_cm: float
     muac_mm: float
+
+class PatientResponse(Patient):
     bmi: float
     build: str
     nutrition_status: str
@@ -48,7 +48,6 @@ def classify_build(bmi):
     else:
         return "Obese"
 
-# MUAC classification
 def classify_muac(muac):
     if muac < 115:
         return "SAM"
@@ -57,8 +56,12 @@ def classify_muac(muac):
     else:
         return "Normal"
 
-# API endpoints
-@app.post("/patients")
+# Routes
+@app.get("/")
+def root():
+    return {"message": "Nutricare API is running!"}
+
+@app.post("/patients", response_model=PatientResponse)
 def add_patient(patient: Patient):
     bmi = calculate_bmi(patient.weight_kg, patient.height_cm)
     build = classify_build(bmi)
@@ -71,19 +74,10 @@ def add_patient(patient: Patient):
         "nutrition_status": nutrition_status
     })
 
-    patients_db.append(patient_dict)
+    patient_response = PatientResponse(**patient_dict)
+    patients_db.append(patient_response)
+    return patient_response
 
-    return {
-        "status": "success",
-        "data": patient_dict
-    }
-
-@app.get("/")
-def root():
-    return {"message": "Nutricare API is running!"}
-    
-@app.get("/patients", response_model=List[dict])
+@app.get("/patients", response_model=List[PatientResponse])
 def get_patients():
     return patients_db
-
-
