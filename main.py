@@ -75,6 +75,11 @@ def add_patient(patient: Patient):
         "data": patient_dict
     }
 
+@app.get("/")
+def root():
+    return {"message": "Nutricare API is running!"}
+    
 @app.get("/patients", response_model=List[dict])
 def get_patients():
     return patients_db
+
