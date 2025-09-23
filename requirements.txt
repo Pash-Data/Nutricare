@@ -4,3 +4,5 @@ python-dotenv
 python-telegram-bot==21.4
 requests  # For any internal calls if needed
 jinja2  # For HTML templates
+python-multipart
+
