@@ -1,18 +1,21 @@
+# Environment variables
+.env
+
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.env
-
-# Virtual environment
-.venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
 env/
 venv/
+.venv/
 
-# Logs
-*.log
+# IDE
+.idea/
+*.swp
+*.swo
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
