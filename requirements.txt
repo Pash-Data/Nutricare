@@ -2,7 +2,8 @@ fastapi
 uvicorn
 python-dotenv
 python-telegram-bot==21.4
-requests  # For any internal calls if needed
-jinja2  # For HTML templates
+requests
+jinja2
 python-multipart
-
+psycopg2-binary  # PostgreSQL adapter
+sqlalchemy       # ORM for Python
