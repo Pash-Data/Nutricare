@@ -1,19 +1,22 @@
 from logging.config import fileConfig
 import os
-import importlib  # Added back to fix NameError
+import importlib
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
 
-# Dynamic import to ensure PatientDB is loaded
+# Dynamic import with debugging
+print("Attempting to import main.py...")
 try:
     main_module = importlib.import_module("main")
+    print("main_module loaded:", dir(main_module))  # Debug: List available attributes
     PatientDB = getattr(main_module, "PatientDB", None)
     if PatientDB is None:
-        raise ImportError("PatientDB not found in main.py. Verify file content.")
+        raise ImportError("PatientDB not found in main.py. Available attributes:", dir(main_module))
     target_metadata = PatientDB.metadata
+    print("PatientDB loaded successfully:", PatientDB)
 except ImportError as e:
     raise ImportError(f"Failed to import PatientDB from main.py: {str(e)}")
 
