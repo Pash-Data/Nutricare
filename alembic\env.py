@@ -14,7 +14,10 @@ try:
     print("main_module loaded:", dir(main_module))  # Debug: List available attributes
     PatientDB = getattr(main_module, "PatientDB", None)
     if PatientDB is None:
-        raise ImportError("PatientDB not found in main.py. Available attributes:", dir(main_module))
+        print("PatientDB not found, trying patients_db...")
+        PatientDB = getattr(main_module, "patients_db", None)
+        if PatientDB is None:
+            raise ImportError("Neither PatientDB nor patients_db found in main.py. Available attributes:", dir(main_module))
     target_metadata = PatientDB.metadata
     print("PatientDB loaded successfully:", PatientDB)
 except ImportError as e:
