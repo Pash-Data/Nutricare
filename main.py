@@ -14,10 +14,14 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Ad
 
 load_dotenv()
 
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+# Check if running in Alembic environment to avoid token requirement during migrations
+if "ALEMBIC" not in os.environ:
+    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+    if not TELEGRAM_TOKEN:
+        raise ValueError("TELEGRAM_TOKEN not set in environment")
+else:
+    TELEGRAM_TOKEN = None  # Placeholder for Alembic context
 DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
-if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_TOKEN not set in environment")
 
 # SQLAlchemy/SQLModel setup (new)
 engine = create_engine(DATABASE_URL, echo=True)  # echo=True for debug (remove in prod)
@@ -287,3 +291,4 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
 async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session)):
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
+
