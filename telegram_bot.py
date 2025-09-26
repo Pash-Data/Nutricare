@@ -3,7 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
 from sqlmodel import Session, select
-from main import engine, PatientDB, calculate_bmi, classify_build, classify_muac, get_recommendation  # Import necessary components
+from main import engine, PatientDB, calculate_bmi, classify_build, classify_muac, get_recommendation
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Conversation states
 NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
 
-def initialize_telegram_bot():
+async def initialize_telegram_bot():
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
     if not TELEGRAM_TOKEN:
         logger.warning("TELEGRAM_TOKEN not set; bot will not initialize")
