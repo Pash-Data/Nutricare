@@ -68,7 +68,7 @@ async def setup_telegram():
         NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
 
         async def start(update: Update, context: CallbackContext) -> None:
-            await update.message.reply_text('Welcome to NutriCare Bot! Use /add to add a patient, /list to view patients, or /export to download CSV.')
+            await update.message.reply_text('Welcome to NutriCare Bot! Use /add to add a patient or /list to view patients.')
 
         async def add_patient(update: Update, context: CallbackContext) -> int:
             await update.message.reply_text('Enter patient name:')
@@ -182,10 +182,10 @@ async def setup_telegram():
         )
         application.add_handler(conv_handler)
 
-        # Initialize and start the application (for webhook support)
+        # Start the bot for webhook (non-blocking)
         await application.initialize()
-        # Note: Don't run_polling here; webhook will handle updates
-        print("Telegram application initialized for webhook")
+        await application.start()
+        print("Telegram bot started with webhook support")
 
 # Run Telegram setup on app startup
 app.add_event_handler("startup", setup_telegram)
@@ -205,7 +205,6 @@ async def webhook(request: Request):
         print(f"Webhook error: {e}")
         return {"ok": False, "error": str(e)}
 
-# Pydantic models
 class Patient(BaseModel):
     name: str
     age: int
@@ -220,7 +219,6 @@ class PatientResponse(Patient):
     nutrition_status: str
     recommendation: str
 
-# Utility functions
 def calculate_bmi(weight, height):
     height_m = height / 100
     return round(weight / (height_m ** 2), 2)
@@ -253,7 +251,6 @@ def get_recommendation(nutrition_status):
     else:
         return "Normal - Maintain healthy diet and regular check-ups."
 
-# API Routes
 @app.get("/")
 def root():
     return {"message": "Nutricare API is running!"}
