@@ -3,7 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
 from sqlmodel import Session, select
-from main import engine, PatientDB  # Import database engine and model from main.py
+from main import engine, PatientDB, calculate_bmi, classify_build, classify_muac, get_recommendation  # Import necessary components
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -120,10 +120,7 @@ def initialize_telegram_bot():
                 await update.message.reply_document(document=output, filename="patients.csv")
                 output.close()
 
-        # Add handlers
-        application.add_handler(CommandHandler('start', start))
-        application.add_handler(CommandHandler('list', list_patients))
-        application.add_handler(CommandHandler('export', export_csv))
+        # Define conv_handler
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('add', add_patient)],
             states={
@@ -135,41 +132,14 @@ def initialize_telegram_bot():
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
+
+        # Add handlers
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(CommandHandler('list', list_patients))
+        application.add_handler(CommandHandler('export', export_csv))
         application.add_handler(conv_handler)
         logger.info("Telegram bot initialized successfully")
         return application
     except Exception as e:
         logger.error(f"Failed to initialize Telegram bot: {e}")
         return None
-
-def calculate_bmi(weight, height):
-    height_m = height / 100
-    return round(weight / (height_m ** 2), 2)
-
-def classify_build(bmi):
-    if bmi < 16:
-        return "Severely underweight"
-    elif bmi < 18.5:
-        return "Underweight"
-    elif bmi < 25:
-        return "Normal"
-    elif bmi < 30:
-        return "Overweight"
-    else:
-        return "Obese"
-
-def classify_muac(muac):
-    if muac < 115:
-        return "SAM"
-    elif muac < 125:
-        return "MAM"
-    else:
-        return "Normal"
-
-def get_recommendation(nutrition_status):
-    if nutrition_status == "SAM":
-        return "Severe Acute Malnutrition - Immediate referral to therapeutic feeding program, medical evaluation, and supplementary feeding."
-    elif nutrition_status == "MAM":
-        return "Moderate Acute Malnutrition - Provide supplementary feeding, monitor closely, and educate on balanced diet."
-    else:
-        return "Normal - Maintain healthy diet and regular check-ups."
