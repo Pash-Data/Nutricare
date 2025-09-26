@@ -11,6 +11,7 @@ import csv
 import io
 from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
 from telegram_bot import initialize_telegram_bot  # Import Telegram initialization
+import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -54,7 +55,6 @@ app.add_middleware(
 # Global application instance
 application = None
 
-@app.on_event("startup")
 async def startup_event():
     global engine, application
     try:
@@ -63,12 +63,20 @@ async def startup_event():
         SQLModel.metadata.create_all(engine)
         logger.info("Database initialized")
 
-        # Telegram setup
-        application = await initialize_telegram_bot()  # Call async initialization
-        if application:
-            logger.info("Telegram bot initialized successfully")
-        else:
-            logger.warning("Telegram bot initialization failed or skipped")
+        # Telegram setup with timeout
+        try:
+            async with asyncio.timeout(10):  # 10-second timeout
+                application = await initialize_telegram_bot()
+            if application:
+                logger.info("Telegram bot initialized successfully")
+            else:
+                logger.warning("Telegram bot initialization failed or skipped")
+        except asyncio.TimeoutError:
+            logger.error("Telegram initialization timed out")
+            application = None
+        except Exception as e:
+            logger.error(f"Telegram initialization error: {e}")
+            application = None
     except Exception as e:
         logger.error(f"Startup error: {e}")
         application = None
@@ -198,6 +206,9 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
 async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session)):
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
+
+# Register the startup event
+app.add_event_handler("startup", startup_event)
 
 if __name__ == "__main__":
     import uvicorn
