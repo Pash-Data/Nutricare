@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
 import os
-import traceback
 import logging
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -19,18 +18,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-
-# Debug for Alembic environment
-print("Running in Alembic:", "alembic" in traceback.format_stack()[-1].lower())
-if "alembic" not in traceback.format_stack()[-1].lower():
-    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-    if not TELEGRAM_TOKEN:
-        logger.warning("TELEGRAM_TOKEN not set; bot will not initialize")
-        TELEGRAM_TOKEN = None
-else:
-    TELEGRAM_TOKEN = None
-
-print(f"TELEGRAM_TOKEN loaded: {TELEGRAM_TOKEN is not None}")
 
 DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")
 
@@ -66,12 +53,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize application at module level with fallback
+# Global application instance
 application = None
-if TELEGRAM_TOKEN:
+
+# Initialize Telegram application on startup
+@app.on_event("startup")
+async def startup_event():
+    global application
+    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+    if not TELEGRAM_TOKEN:
+        logger.warning("TELEGRAM_TOKEN not set; bot will not initialize")
+        return
     try:
         print("Initializing Telegram application...")
         application = Application.builder().token(TELEGRAM_TOKEN).build()
+        print("Application built successfully")
         NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
 
         async def start(update: Update, context: CallbackContext) -> None:
@@ -179,8 +175,6 @@ if TELEGRAM_TOKEN:
     except Exception as e:
         logger.error(f"Failed to initialize Telegram bot: {e}")
         application = None
-else:
-    application = None  # Explicit fallback for Alembic
 
 # Webhook endpoint
 @app.post("/webhook")
