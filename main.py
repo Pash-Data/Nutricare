@@ -22,14 +22,19 @@ load_dotenv()
 
 # Debug for Alembic environment
 print("Running in Alembic:", "alembic" in traceback.format_stack()[-1].lower())
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-if not TELEGRAM_TOKEN and "alembic" not in traceback.format_stack()[-1].lower():
-    raise ValueError("TELEGRAM_TOKEN not set in environment")
-print(f"TELEGRAM_TOKEN loaded: {TELEGRAM_TOKEN is not None}")  # Debug print
+if "alembic" not in traceback.format_stack()[-1].lower():
+    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+    if not TELEGRAM_TOKEN:
+        logger.warning("TELEGRAM_TOKEN not set; bot will not initialize")
+        TELEGRAM_TOKEN = None
+else:
+    TELEGRAM_TOKEN = None
+
+print(f"TELEGRAM_TOKEN loaded: {TELEGRAM_TOKEN is not None}")
 
 DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")
 
-engine = create_engine(DATABASE_URL, echo=False)  # Disable echo for production-like behavior
+engine = create_engine(DATABASE_URL, echo=False)
 
 class PatientDB(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -61,13 +66,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize application at module level with detailed error handling
+# Initialize application at module level with fallback
 application = None
 if TELEGRAM_TOKEN:
     try:
-        print("Attempting to initialize Telegram application...")  # Debug print
+        print("Initializing Telegram application...")
         application = Application.builder().token(TELEGRAM_TOKEN).build()
-        print("Application built successfully")  # Debug print
         NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
 
         async def start(update: Update, context: CallbackContext) -> None:
@@ -156,22 +160,9 @@ if TELEGRAM_TOKEN:
                 msg += f"{p.name}: BMI {p.bmi} ({p.build}), Nutrition: {p.nutrition_status}, Rec: {p.recommendation[:50]}...\n"
             await update.message.reply_text(msg)
 
-        async def export_csv(update: Update, context: CallbackContext) -> None:
-            with Session(engine) as session:
-                patients = session.exec(select(PatientDB)).all()
-                output = io.StringIO()
-                writer = csv.writer(output)
-                writer.writerow(["id", "name", "age", "weight_kg", "height_cm", "muac_mm", "bmi", "build", "nutrition_status", "recommendation"])
-                for p in patients:
-                    writer.writerow([p.id, p.name, p.age, p.weight_kg, p.height_cm, p.muac_mm, p.bmi, p.build, p.nutrition_status, p.recommendation])
-                output.seek(0)
-                await update.message.reply_document(document=output, filename="patients.csv")
-                output.close()
-
         # Add handlers
         application.add_handler(CommandHandler('start', start))
         application.add_handler(CommandHandler('list', list_patients))
-        application.add_handler(CommandHandler('export', export_csv))
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('add', add_patient)],
             states={
@@ -188,22 +179,23 @@ if TELEGRAM_TOKEN:
     except Exception as e:
         logger.error(f"Failed to initialize Telegram bot: {e}")
         application = None
-        print(f"Initialization failed with error: {e}")  # Debug print
+else:
+    application = None  # Explicit fallback for Alembic
 
 # Webhook endpoint
 @app.post("/webhook")
 async def webhook(request: Request):
     global application
     if not application:
-        return {"ok": false, "error": "Telegram application not initialized"}
+        return {"ok": False, "error": "Telegram application not initialized"}
     try:
         json_data = await request.json()
         update = Update.de_json(json_data, application.bot)
         await application.process_update(update)
-        return {"ok": true}
+        return {"ok": True}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
-        return {"ok": false, "error": str(e)}
+        return {"ok": False, "error": str(e)}
 
 class Patient(BaseModel):
     name: str
