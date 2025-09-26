@@ -22,13 +22,9 @@ load_dotenv()
 
 # Debug for Alembic environment
 print("Running in Alembic:", "alembic" in traceback.format_stack()[-1].lower())
-if "alembic" not in traceback.format_stack()[-1].lower():
-    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-    if not TELEGRAM_TOKEN:
-        raise ValueError("TELEGRAM_TOKEN not set in environment")
-else:
-    TELEGRAM_TOKEN = None
-
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+if not TELEGRAM_TOKEN and "alembic" not in traceback.format_stack()[-1].lower():
+    raise ValueError("TELEGRAM_TOKEN not set in environment")
 print(f"TELEGRAM_TOKEN loaded: {TELEGRAM_TOKEN is not None}")  # Debug print
 
 DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")
@@ -65,12 +61,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize application at module level
+# Initialize application at module level with detailed error handling
 application = None
 if TELEGRAM_TOKEN:
     try:
-        print("Initializing Telegram application...")  # Debug print
+        print("Attempting to initialize Telegram application...")  # Debug print
         application = Application.builder().token(TELEGRAM_TOKEN).build()
+        print("Application built successfully")  # Debug print
         NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
 
         async def start(update: Update, context: CallbackContext) -> None:
@@ -191,6 +188,7 @@ if TELEGRAM_TOKEN:
     except Exception as e:
         logger.error(f"Failed to initialize Telegram bot: {e}")
         application = None
+        print(f"Initialization failed with error: {e}")  # Debug print
 
 # Webhook endpoint
 @app.post("/webhook")
