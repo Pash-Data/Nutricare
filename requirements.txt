@@ -5,7 +5,8 @@ python-telegram-bot==21.4
 requests
 jinja2
 python-multipart
-psycopg2-binary  # For PostgreSQL, optional if using SQLite
-sqlalchemy       # ORM for Python
+psycopg2-binary  # Optional, for PostgreSQL
+sqlalchemy
 sqlmodel==0.0.12
+gunicorn  # Added for Render deployment
 
