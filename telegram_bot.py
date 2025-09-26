@@ -3,7 +3,6 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
 from sqlmodel import Session, select
-from main import engine, PatientDB, calculate_bmi, classify_build, classify_muac, get_recommendation
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Conversation states
 NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
 
-async def initialize_telegram_bot():
+async def initialize_telegram_bot(engine):
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
     if not TELEGRAM_TOKEN:
         logger.warning("TELEGRAM_TOKEN not set; bot will not initialize")
@@ -68,12 +67,14 @@ async def initialize_telegram_bot():
                 await update.message.reply_text('Invalid MUAC. Enter a number:')
                 return MUAC
             data = context.user_data
+            from models import calculate_bmi, classify_build, classify_muac, get_recommendation  # Deferred import
             bmi = calculate_bmi(data['weight'], data['height'])
             build = classify_build(bmi)
             nutrition_status = classify_muac(data['muac'])
             recommendation = get_recommendation(nutrition_status)
             feedback = f"Patient: {data['name']}, Age: {data['age']}\nBMI: {bmi} ({build})\nNutrition: {nutrition_status}\nRecommendation: {recommendation}"
             await update.message.reply_text(feedback)
+            from models import PatientDB  # Deferred import
             with Session(engine) as session:
                 patient_db = PatientDB(
                     name=data['name'],
@@ -98,6 +99,7 @@ async def initialize_telegram_bot():
             return ConversationHandler.END
 
         async def list_patients(update: Update, context: CallbackContext) -> None:
+            from models import PatientDB  # Deferred import
             with Session(engine) as session:
                 patients = session.exec(select(PatientDB)).all()
             if not patients:
@@ -109,6 +111,7 @@ async def initialize_telegram_bot():
             await update.message.reply_text(msg)
 
         async def export_csv(update: Update, context: CallbackContext) -> None:
+            from models import PatientDB  # Deferred import
             with Session(engine) as session:
                 patients = session.exec(select(PatientDB)).all()
                 output = io.StringIO()
