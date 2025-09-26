@@ -4,13 +4,11 @@ import logging
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 import csv
 import io
-from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
-from telegram_bot import initialize_telegram_bot  # Import Telegram initialization
+from sqlmodel import Session, create_engine, select
+from telegram_bot import initialize_telegram_bot
 import asyncio
 
 # Set up logging
@@ -24,17 +22,7 @@ DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")
 # Defer engine creation to startup
 engine = None
 
-class PatientDB(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(index=True)
-    age: int
-    weight_kg: float
-    height_cm: float
-    muac_mm: float
-    bmi: float
-    build: str
-    nutrition_status: str
-    recommendation: str = Field(sa_column=Text)
+from models import PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation
 
 def get_session():
     global engine
@@ -66,7 +54,7 @@ async def startup_event():
         # Telegram setup with timeout
         try:
             async with asyncio.timeout(10):  # 10-second timeout
-                application = await initialize_telegram_bot()
+                application = await initialize_telegram_bot(engine)  # Pass engine as argument
             if application:
                 logger.info("Telegram bot initialized successfully")
             else:
@@ -95,52 +83,6 @@ async def webhook(request: Request):
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return {"ok": False, "error": str(e)}
-
-class Patient(BaseModel):
-    name: str
-    age: int
-    weight_kg: float
-    height_cm: float
-    muac_mm: float
-
-class PatientResponse(Patient):
-    id: int | None = None
-    bmi: float
-    build: str
-    nutrition_status: str
-    recommendation: str
-
-def calculate_bmi(weight, height):
-    height_m = height / 100
-    return round(weight / (height_m ** 2), 2)
-
-def classify_build(bmi):
-    if bmi < 16:
-        return "Severely underweight"
-    elif bmi < 18.5:
-        return "Underweight"
-    elif bmi < 25:
-        return "Normal"
-    elif bmi < 30:
-        return "Overweight"
-    else:
-        return "Obese"
-
-def classify_muac(muac):
-    if muac < 115:
-        return "SAM"
-    elif muac < 125:
-        return "MAM"
-    else:
-        return "Normal"
-
-def get_recommendation(nutrition_status):
-    if nutrition_status == "SAM":
-        return "Severe Acute Malnutrition - Immediate referral to therapeutic feeding program, medical evaluation, and supplementary feeding."
-    elif nutrition_status == "MAM":
-        return "Moderate Acute Malnutrition - Provide supplementary feeding, monitor closely, and educate on balanced diet."
-    else:
-        return "Normal - Maintain healthy diet and regular check-ups."
 
 @app.get("/")
 def root():
