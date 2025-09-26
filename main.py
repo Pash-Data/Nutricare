@@ -22,7 +22,10 @@ DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")
 # Defer engine creation to startup
 engine = None
 
-from models import PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation
+# Import models lazily to avoid side effects
+def import_models():
+    from models import PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation
+    return PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation
 
 def get_session():
     global engine
@@ -51,6 +54,9 @@ async def startup_event():
         SQLModel.metadata.create_all(engine)
         logger.info("Database initialized")
 
+        # Import models after engine is set
+        PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation = import_models()
+
         # Telegram setup with timeout
         try:
             async with asyncio.timeout(10):  # 10-second timeout
@@ -77,6 +83,7 @@ async def webhook(request: Request):
         return {"ok": False, "error": "Telegram application not initialized"}
     try:
         json_data = await request.json()
+        from models import PatientDB  # Deferred import
         update = Update.de_json(json_data, application.bot)
         await application.process_update(update)
         return {"ok": True}
