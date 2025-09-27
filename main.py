@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import csv
 import io
 from sqlmodel import Session, create_engine, select
-from telegram_bot import initialize_telegram_bot
+from bot import initialize_telegram_bot
 import asyncio
 
 # Set up logging
