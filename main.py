@@ -20,12 +20,14 @@ logger = logging.getLogger(__name__)
 
 load_dotenv("C:/Users/user/Nutricare/.env")  # Explicit path
 print(f"Dotenv loaded, current directory: {os.getcwd()}")  # Debug current directory
+print(f"Attempting to load from: C:/Users/user/Nutricare/.env")  # Debug path
+print(f"File exists: {os.path.isfile('C:/Users/user/Nutricare/.env')}")  # Check file existence
+print(f"Loaded TELEGRAM_TOKEN: {os.getenv('TELEGRAM_TOKEN')}")  # Debug token
+print(f"All environment variables: {dict(os.environ)}")  # Debug all env vars
 
 # Check if running in Alembic environment to avoid token requirement during migrations
 if "ALEMBIC" not in os.environ:
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-    print(f"Loaded TELEGRAM_TOKEN: {TELEGRAM_TOKEN}")  # Debug print
-    print(f"All environment variables: {dict(os.environ)}")  # Debug all env vars
     if not TELEGRAM_TOKEN:
         raise ValueError("TELEGRAM_TOKEN not set in environment")
 else:
