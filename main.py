@@ -1,37 +1,53 @@
 from dotenv import load_dotenv
 import os
-import logging
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
-from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 import csv
 import io
-from sqlmodel import Session, create_engine, select
-from bot import initialize_telegram_bot
-import asyncio
-from typing import List  # Add this for List[PatientResponse]
-from models import PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation  # Static import
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
+from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Add for DB
 
 load_dotenv()
 
-DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")
+import os
+# Check if running in Alembic environment to avoid token requirement during migrations
+if "ALEMBIC" not in os.environ:
+    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+    if not TELEGRAM_TOKEN:
+        raise ValueError("TELEGRAM_TOKEN not set in environment")
+else:
+    TELEGRAM_TOKEN = None  # Placeholder for Alembic context
+DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
 
-# Defer engine creation to startup
-engine = None
+# SQLAlchemy/SQLModel setup (new)
+engine = create_engine(DATABASE_URL, echo=True)  # echo=True for debug (remove in prod)
 
-def import_models():
-    return PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation
+# SQLModel for Patient table (new - this is PatientDB)
+class PatientDB(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    age: int
+    weight_kg: float
+    height_cm: float
+    muac_mm: float
+    bmi: float
+    build: str
+    nutrition_status: str
+    recommendation: str = Field(sa_column=Text)
 
+# Create DB and tables on startup (new)
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+create_db_and_tables()
+
+# Dependency for DB session (new)
 def get_session():
-    global engine
-    if not engine:
-        raise HTTPException(status_code=500, detail="Database not initialized")
     with Session(engine) as session:
         yield session
 
@@ -44,51 +60,177 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global application instance
-application = None
+# Setup Telegram Application for webhooks
+application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-async def startup_event():
-    global engine, application
+# Pydantic models (unchanged)
+class Patient(BaseModel):
+    name: str
+    age: int
+    weight_kg: float
+    height_cm: float
+    muac_mm: float
+
+class PatientResponse(Patient):
+    id: int | None = None
+    bmi: float
+    build: str
+    nutrition_status: str
+    recommendation: str
+
+# Utility functions (unchanged)
+def calculate_bmi(weight, height):
+    height_m = height / 100
+    return round(weight / (height_m ** 2), 2)
+
+def classify_build(bmi):
+    if bmi < 16:
+        return "Severely underweight"
+    elif bmi < 18.5:
+        return "Underweight"
+    elif bmi < 25:
+        return "Normal"
+    elif bmi < 30:
+        return "Overweight"
+    else:
+        return "Obese"
+
+def classify_muac(muac):
+    if muac < 115:
+        return "SAM"
+    elif muac < 125:
+        return "MAM"
+    else:
+        return "Normal"
+
+def get_recommendation(nutrition_status):
+    if nutrition_status == "SAM":
+        return "Severe Acute Malnutrition - Immediate referral to therapeutic feeding program, medical evaluation, and supplementary feeding."
+    elif nutrition_status == "MAM":
+        return "Moderate Acute Malnutrition - Provide supplementary feeding, monitor closely, and educate on balanced diet."
+    else:
+        return "Normal - Maintain healthy diet and regular check-ups."
+
+# Bot handlers (updated for DB)
+NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
+
+async def start(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text('Welcome to NutriCare Bot! Use /add to add a patient or /list to view patients.')
+
+async def add_patient(update: Update, context: CallbackContext) -> int:
+    await update.message.reply_text('Enter patient name:')
+    return NAME
+
+async def name(update: Update, context: CallbackContext) -> int:
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text('Enter age:')
+    return AGE
+
+async def age(update: Update, context: CallbackContext) -> int:
     try:
-        # Database setup
-        engine = create_engine(DATABASE_URL, echo=False)
-        SQLModel.metadata.create_all(engine)
-        logger.info("Database initialized")
+        context.user_data['age'] = int(update.message.text)
+    except ValueError:
+        await update.message.reply_text('Invalid age. Enter a number:')
+        return AGE
+    await update.message.reply_text('Enter weight in kg:')
+    return WEIGHT
 
-        # Telegram setup with timeout
-        try:
-            async with asyncio.timeout(10):  # 10-second timeout
-                application = await initialize_telegram_bot(engine)
-            if application:
-                logger.info("Telegram bot initialized successfully")
-            else:
-                logger.warning("Telegram bot initialization failed or skipped")
-        except asyncio.TimeoutError:
-            logger.error("Telegram initialization timed out")
-            application = None
-        except Exception as e:
-            logger.error(f"Telegram initialization error: {e}")
-            application = None
-    except Exception as e:
-        logger.error(f"Startup error: {e}")
-        application = None
+async def weight(update: Update, context: CallbackContext) -> int:
+    try:
+        context.user_data['weight'] = float(update.message.text)
+    except ValueError:
+        await update.message.reply_text('Invalid weight. Enter a number:')
+        return WEIGHT
+    await update.message.reply_text('Enter height in cm:')
+    return HEIGHT
 
-# Webhook endpoint
-@app.post("/webhook")
+async def height(update: Update, context: CallbackContext) -> int:
+    try:
+        context.user_data['height'] = float(update.message.text)
+    except ValueError:
+        await update.message.reply_text('Invalid height. Enter a number:')
+        return HEIGHT
+    await update.message.reply_text('Enter MUAC in mm:')
+    return MUAC
+
+async def muac(update: Update, context: CallbackContext) -> int:
+    try:
+        context.user_data['muac'] = float(update.message.text)
+    except ValueError:
+        await update.message.reply_text('Invalid MUAC. Enter a number:')
+        return MUAC
+
+    data = context.user_data
+    bmi = calculate_bmi(data['weight'], data['height'])
+    build = classify_build(bmi)
+    nutrition_status = classify_muac(data['muac'])
+    recommendation = get_recommendation(nutrition_status)
+
+    feedback = f"Patient: {data['name']}, Age: {data['age']}\nBMI: {bmi} ({build})\nNutrition: {nutrition_status}\nRecommendation: {recommendation}"
+    await update.message.reply_text(feedback)
+
+    # Add to DB (updated)
+    patient_db = PatientDB(
+        name=data['name'],
+        age=data['age'],
+        weight_kg=data['weight'],
+        height_cm=data['height'],
+        muac_mm=data['muac'],
+        bmi=bmi,
+        build=build,
+        nutrition_status=nutrition_status,
+        recommendation=recommendation
+    )
+    with Session(engine) as session:
+        session.add(patient_db)
+        session.commit()
+    await update.message.reply_text('Patient added to database!')
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: CallbackContext) -> int:
+    await update.message.reply_text('Operation cancelled.')
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def list_patients(update: Update, context: CallbackContext) -> None:
+    with Session(engine) as session:
+        patients = session.exec(select(PatientDB)).all()
+    if not patients:
+        await update.message.reply_text('No patients in database.')
+        return
+    msg = "Patients:\n"
+    for p in patients:
+        msg += f"{p.name}: BMI {p.bmi} ({p.build}), Nutrition: {p.nutrition_status}, Rec: {p.recommendation[:50]}...\n"
+    await update.message.reply_text(msg)
+
+# Setup bot handlers (unchanged)
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler('add', add_patient)],
+    states={
+        NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
+        AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, age)],
+        WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, weight)],
+        HEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, height)],
+        MUAC: [MessageHandler(filters.TEXT & ~filters.COMMAND, muac)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel)],
+)
+
+application.add_handler(CommandHandler('start', start))
+application.add_handler(CommandHandler('list', list_patients))
+application.add_handler(conv_handler)
+
+# Webhook endpoint (unchanged)
+@app.post(f"/webhook/{TELEGRAM_TOKEN}")
 async def webhook(request: Request):
-    global application
-    if not application:
-        return {"ok": False, "error": "Telegram application not initialized"}
-    try:
-        json_data = await request.json()
-        from models import PatientDB  # Deferred import
-        update = Update.de_json(json_data, application.bot)
-        await application.process_update(update)
-        return {"ok": True}
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return {"ok": False, "error": str(e)}
+    json_data = await request.json()
+    update = Update.de_json(json_data, application.bot)
+    await application.process_update(update)
+    return {"ok": True}
 
+# API Routes (updated for DB)
 @app.get("/")
 def root():
     return {"message": "Nutricare API is running!"}
@@ -132,32 +274,22 @@ def export_csv(session: Session = Depends(get_session)):
     output.seek(0)
     return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=patients.csv"})
 
+# Dashboard setup (updated for DB)
 templates = Jinja2Templates(directory="templates")
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, session: Session = Depends(get_session)):
-    try:
-        patients = session.exec(select(PatientDB)).all()
-        summary = {
-            "total": len(patients),
-            "sam": sum(1 for p in patients if p.nutrition_status == "SAM"),
-            "mam": sum(1 for p in patients if p.nutrition_status == "MAM"),
-            "normal": sum(1 for p in patients if p.nutrition_status == "Normal")
-        }
-        return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary})
-    except Exception as e:
-        logger.error(f"Dashboard error: {e}")
-        return {"detail": "Dashboard temporarily unavailable. Check logs."}
+    patients = session.exec(select(PatientDB)).all()
+    summary = {
+        "total": len(patients),
+        "sam": sum(1 for p in patients if p.nutrition_status == "SAM"),
+        "mam": sum(1 for p in patients if p.nutrition_status == "MAM"),
+        "normal": sum(1 for p in patients if p.nutrition_status == "Normal")
+    }
+    return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary})
 
 @app.post("/dashboard/add")
 async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session)):
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
 
-# Register the startup event
-app.add_event_handler("startup", startup_event)
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
