@@ -21,3 +21,6 @@ venv/
 Thumbs.db
 ".env" 
 ".env" 
+".env" 
+"env.py" 
+"alembic/" 
