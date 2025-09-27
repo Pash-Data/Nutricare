@@ -10,11 +10,16 @@ import csv
 import io
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
-from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Add for DB
+from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
+import asyncio
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-import os
 # Check if running in Alembic environment to avoid token requirement during migrations
 if "ALEMBIC" not in os.environ:
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -24,10 +29,10 @@ else:
     TELEGRAM_TOKEN = None  # Placeholder for Alembic context
 DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
 
-# SQLAlchemy/SQLModel setup (new)
+# SQLAlchemy/SQLModel setup
 engine = create_engine(DATABASE_URL, echo=True)  # echo=True for debug (remove in prod)
 
-# SQLModel for Patient table (new - this is PatientDB)
+# SQLModel for Patient table
 class PatientDB(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True)
@@ -40,13 +45,13 @@ class PatientDB(SQLModel, table=True):
     nutrition_status: str
     recommendation: str = Field(sa_column=Text)
 
-# Create DB and tables on startup (new)
+# Create DB and tables on startup
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
 create_db_and_tables()
 
-# Dependency for DB session (new)
+# Dependency for DB session
 def get_session():
     with Session(engine) as session:
         yield session
@@ -60,10 +65,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Setup Telegram Application for webhooks
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+# Setup Telegram Application for polling
+if TELEGRAM_TOKEN:  # Only initialize if token is available
+    bot_application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-# Pydantic models (unchanged)
+# Pydantic models
 class Patient(BaseModel):
     name: str
     age: int
@@ -78,7 +84,7 @@ class PatientResponse(Patient):
     nutrition_status: str
     recommendation: str
 
-# Utility functions (unchanged)
+# Utility functions
 def calculate_bmi(weight, height):
     height_m = height / 100
     return round(weight / (height_m ** 2), 2)
@@ -111,7 +117,7 @@ def get_recommendation(nutrition_status):
     else:
         return "Normal - Maintain healthy diet and regular check-ups."
 
-# Bot handlers (updated for DB)
+# Bot handlers
 NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
 
 async def start(update: Update, context: CallbackContext) -> None:
@@ -169,7 +175,7 @@ async def muac(update: Update, context: CallbackContext) -> int:
     feedback = f"Patient: {data['name']}, Age: {data['age']}\nBMI: {bmi} ({build})\nNutrition: {nutrition_status}\nRecommendation: {recommendation}"
     await update.message.reply_text(feedback)
 
-    # Add to DB (updated)
+    # Add to DB
     patient_db = PatientDB(
         name=data['name'],
         age=data['age'],
@@ -205,32 +211,25 @@ async def list_patients(update: Update, context: CallbackContext) -> None:
         msg += f"{p.name}: BMI {p.bmi} ({p.build}), Nutrition: {p.nutrition_status}, Rec: {p.recommendation[:50]}...\n"
     await update.message.reply_text(msg)
 
-# Setup bot handlers (unchanged)
-conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('add', add_patient)],
-    states={
-        NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
-        AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, age)],
-        WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, weight)],
-        HEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, height)],
-        MUAC: [MessageHandler(filters.TEXT & ~filters.COMMAND, muac)],
-    },
-    fallbacks=[CommandHandler('cancel', cancel)],
-)
+# Setup bot handlers
+if TELEGRAM_TOKEN:
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('add', add_patient)],
+        states={
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
+            AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, age)],
+            WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, weight)],
+            HEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, height)],
+            MUAC: [MessageHandler(filters.TEXT & ~filters.COMMAND, muac)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
 
-application.add_handler(CommandHandler('start', start))
-application.add_handler(CommandHandler('list', list_patients))
-application.add_handler(conv_handler)
+    bot_application.add_handler(CommandHandler('start', start))
+    bot_application.add_handler(CommandHandler('list', list_patients))
+    bot_application.add_handler(conv_handler)
 
-# Webhook endpoint (unchanged)
-@app.post(f"/webhook/{TELEGRAM_TOKEN}")
-async def webhook(request: Request):
-    json_data = await request.json()
-    update = Update.de_json(json_data, application.bot)
-    await application.process_update(update)
-    return {"ok": True}
-
-# API Routes (updated for DB)
+# API Routes
 @app.get("/")
 def root():
     return {"message": "Nutricare API is running!"}
@@ -274,7 +273,7 @@ def export_csv(session: Session = Depends(get_session)):
     output.seek(0)
     return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=patients.csv"})
 
-# Dashboard setup (updated for DB)
+# Dashboard setup
 templates = Jinja2Templates(directory="templates")
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -293,3 +292,28 @@ async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
 
+# Run bot and FastAPI in separate tasks
+async def run_bot():
+    if TELEGRAM_TOKEN:
+        logger.info("Starting Telegram bot with polling...")
+        await bot_application.initialize()
+        await bot_application.start_polling()
+        logger.info("Telegram bot running with polling.")
+        await bot_application.updater.start_polling()
+        await bot_application.updater.idle()  # Keep running until stopped
+
+if __name__ == "__main__":
+    import uvicorn
+    import threading
+
+    # Run FastAPI in the main thread
+    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=True)
+    server = uvicorn.Server(config)
+
+    # Run bot in a separate thread
+    bot_thread = threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True)
+    bot_thread.start()
+
+    # Start FastAPI server
+    logger.info("Starting FastAPI server...")
+    server.run()
