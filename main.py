@@ -3,6 +3,7 @@ import os
 import logging
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 import csv
@@ -10,6 +11,8 @@ import io
 from sqlmodel import Session, create_engine, select
 from bot import initialize_telegram_bot
 import asyncio
+from typing import List  # Add this for List[PatientResponse]
+from models import PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation  # Static import
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -22,9 +25,7 @@ DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")
 # Defer engine creation to startup
 engine = None
 
-# Import models lazily to avoid side effects
 def import_models():
-    from models import PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation
     return PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation
 
 def get_session():
@@ -54,13 +55,10 @@ async def startup_event():
         SQLModel.metadata.create_all(engine)
         logger.info("Database initialized")
 
-        # Import models after engine is set
-        PatientDB, Patient, PatientResponse, calculate_bmi, classify_build, classify_muac, get_recommendation = import_models()
-
         # Telegram setup with timeout
         try:
             async with asyncio.timeout(10):  # 10-second timeout
-                application = await initialize_telegram_bot(engine)  # Pass engine as argument
+                application = await initialize_telegram_bot(engine)
             if application:
                 logger.info("Telegram bot initialized successfully")
             else:
