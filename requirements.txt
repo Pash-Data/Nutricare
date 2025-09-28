@@ -2,7 +2,4 @@ fastapi==0.111.0
 uvicorn==0.30.1
 python-dotenv==1.0.1
 sqlmodel==0.0.15
-<<<<<<< HEAD
-Jinja2==3.1.4
-=======
 Jinja2==3.1.4
