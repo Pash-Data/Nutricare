@@ -1,4 +1,29 @@
-"__pycache__/" 
-"*.pyc" 
-"*.db" 
-".env"
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Database
+*.db
+*.sqlite3
+
+# Exports
+*.csv
+*.xlsx
+
+# Environment variables
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
