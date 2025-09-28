@@ -1,57 +1,32 @@
 # Nutricare App 
 
 Nutricare is a **child malnutrition tracking system** designed for primary healthcare workers. It consists of a FastAPI backend, a Telegram bot for quick patient registration, and optional web dashboard (React) integration.
-
 ---
-## Features
-- Add patient details (name, age, weight, height, MUAC) via Telegram commands.
-- View patient list and summary statistics.
-- Export patient data as a CSV file.
-- Web dashboard for manual data entry and visualization.
-- Webhook support for Telegram integration using ngrok or Render.
 
 ## Prerequisites
-- Python 3.8+
-- Git (for cloning the repository)
+- Python 3.10 or higher
+- pip (Python package manager)
 
-## Installation
+## Features
+- **Dashboard**: View patient summaries (total, SAM, MAM, Normal) and a table of all patients.
+- **Add Patient**: Enter patient details (name, age, weight, height, MUAC) via a form.
+- **API Endpoints**:
+- `GET /`: Health check.
+- `POST /patients`: Add a new patient.
+- `GET /patients`: List all patients.
+- `GET /export`: Export patient data as CSV.
+- **Nutrition Classification**: Uses WHO standards for 0-5 years children (MUAC <115 mm for SAM, 115-125 mm for MAM, >125 mm for Normal) and original cutoffs for >5 years.
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/Pash-Data/Nutricare.git
-cd Nutricare 
+## Development
+- The app uses SQLite by default. For production, configure a different `DATABASE_URL` (e.g., PostgreSQL).
+- Customize `templates/dashboard.html` for styling or additional features.
 
-## Usage
-
-Telegram Commands:
-
-/start: Welcome message.
-/add: Add a new patient (follow prompts).
-/list: View all patients.
-/summary: Display patient statistics.
-/cancel: Cancel ongoing operations.
-
-
-Web Interface:
-
-Access https://nutricare-nvw0.onrender.com/dashboard for a dashboard.
-Access https://nutricare-nvw0.onrender.com/patients for database.
-Access https://t.me/Nutricare_helper_bot for Telegram bot 
-
-Project Structure
-Nutricare/
-├── main.py          # FastAPI and Telegram bot logic
-├── requirements.txt # Python dependencies
-├── templates/       # HTML templates for dashboard
-├── .env            # Environment variables
-└── patients.db     # SQLite database (generated)
-
+## Contributing
+Feel free to submit issues or pull requests on the repository.
 ## **Links**
 GitHub Repository: https://github.com/Pash-Data/Nutricare
 xAI Grok: https://x.ai/grok (for AI assistance)
 Render: https://render.com (for deployment)
-Telegram Bot API: https://core.telegram.org/bots/api
-BotFather: https://t.me/BotFather
 
 Acknowledgments
 Thanks to the open-source communities of FastAPI, python-telegram-bot, and SQLModel.
