@@ -177,4 +177,7 @@ if __name__ == "__main__":
     # Run FastAPI in the main thread
     config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=True)
     server = uvicorn.Server(config)
+<<<<<<< HEAD
+    server.run()
+=======
     server.run()
