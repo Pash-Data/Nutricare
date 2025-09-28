@@ -65,10 +65,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Setup Telegram Application for polling
-if TELEGRAM_TOKEN:  # Only initialize if token is available
-    bot_application = Application.builder().token(TELEGRAM_TOKEN).build()
-
 # Pydantic models
 class Patient(BaseModel):
     name: str
@@ -212,7 +208,8 @@ async def list_patients(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(msg)
 
 # Setup bot handlers
-if TELEGRAM_TOKEN:
+if TELEGRAM_TOKEN and os.getenv("ENV") != "production":
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('add', add_patient)],
         states={
@@ -225,9 +222,9 @@ if TELEGRAM_TOKEN:
         fallbacks=[CommandHandler('cancel', cancel)],
     )
 
-    bot_application.add_handler(CommandHandler('start', start))
-    bot_application.add_handler(CommandHandler('list', list_patients))
-    bot_application.add_handler(conv_handler)
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('list', list_patients))
+    application.add_handler(conv_handler)
 
 # API Routes
 @app.get("/")
@@ -292,28 +289,20 @@ async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
 
-# Run bot and FastAPI in separate tasks
-async def run_bot():
-    if TELEGRAM_TOKEN:
+# Run bot in background on startup
+@app.on_event("startup")
+async def startup_event():
+    if TELEGRAM_TOKEN and os.getenv("ENV") != "production":
         logger.info("Starting Telegram bot with polling...")
-        await bot_application.initialize()
-        await bot_application.start_polling()
-        logger.info("Telegram bot running with polling.")
-        await bot_application.updater.start_polling()
-        await bot_application.updater.idle()  # Keep running until stopped
+        application = Application.builder().token(TELEGRAM_TOKEN).build()
+        # Add handlers...
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        logger.info("Telegram bot running.")
+        # Keep bot running in background
+        asyncio.create_task(application.updater.idle())
 
 if __name__ == "__main__":
     import uvicorn
-    import threading
-
-    # Run FastAPI in the main thread
-    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=True)
-    server = uvicorn.Server(config)
-
-    # Run bot in a separate thread
-    bot_thread = threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True)
-    bot_thread.start()
-
-    # Start FastAPI server
-    logger.info("Starting FastAPI server...")
-    server.run()
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
