@@ -25,7 +25,9 @@ Nutricare is a **child malnutrition tracking system** designed for primary healt
 Feel free to submit issues or pull requests on the repository.
 ## **Links**
 GitHub Repository: https://github.com/Pash-Data/Nutricare
-xAI Grok: https://x.ai/grok (for AI assistance)
+Access: https://nutricare-nvw0.onrender.com/dashboard for dashboard
+Access: https://nutricare-nvw0.onrender.com/patients for database
+Access: https://nutricare-nvw0.onrender.com/export for download
 Render: https://render.com (for deployment)
 
 Acknowledgments
