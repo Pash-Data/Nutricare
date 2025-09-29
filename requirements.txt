@@ -1,8 +1,7 @@
 fastapi==0.115.0
-uvicorn==0.32.0
-python-telegram-bot==20.8
-sqlmodel==0.0.22
-pg8000==1.31.2
+uvicorn[standard]==0.30.0
+sqlmodel==0.0.16
 jinja2==3.1.4
-python-dotenv==1.0.1
+python-multipart==0.0.9
+pg8000==1.31.2
 
