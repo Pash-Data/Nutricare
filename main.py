@@ -14,15 +14,6 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, filters, ContextTypes
-from sqlmodel import create_engine
-
-# Use DATABASE_URL from .env
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///patients.db")
-
-# For pg8000 (works with Render Postgres)
-# Example: postgresql+pg8000://username:password@host:port/dbname
-engine = create_engine(DATABASE_URL, echo=True)
-
 
 # -------------------- Logging --------------------
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +24,12 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TELEGRAM_TOKEN:
     logger.warning("TELEGRAM_TOKEN not set. Telegram bot will not run.")
 
+# Use DATABASE_URL from env (fallback: SQLite)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///patients.db")
+
+# Important: Ensure pg8000 driver is used in production
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+pg8000://")
 
 # -------------------- Database --------------------
 engine = create_engine(DATABASE_URL, echo=False)
@@ -252,12 +248,37 @@ def add_patient_api(patient: Patient, session: Session = Depends(get_session)):
     session.add(db_patient)
     session.commit()
     session.refresh(db_patient)
-    return PatientResponse(id=db_patient.id, **db_patient.dict(exclude={'id'}))
+    return PatientResponse(
+        id=db_patient.id,
+        name=db_patient.name,
+        age=db_patient.age,
+        weight_kg=db_patient.weight_kg,
+        height_cm=db_patient.height_cm,
+        muac_mm=db_patient.muac_mm,
+        bmi=db_patient.bmi,
+        build=db_patient.build,
+        nutrition_status=db_patient.nutrition_status,
+        recommendation=db_patient.recommendation,
+    )
 
 @app.get("/patients", response_model=List[PatientResponse])
 def get_patients(session: Session = Depends(get_session)):
     patients = session.exec(select(PatientDB)).all()
-    return [PatientResponse(id=p.id, **p.dict(exclude={'id'})) for p in patients]
+    return [
+        PatientResponse(
+            id=p.id,
+            name=p.name,
+            age=p.age,
+            weight_kg=p.weight_kg,
+            height_cm=p.height_cm,
+            muac_mm=p.muac_mm,
+            bmi=p.bmi,
+            build=p.build,
+            nutrition_status=p.nutrition_status,
+            recommendation=p.recommendation,
+        )
+        for p in patients
+    ]
 
 @app.get("/export")
 def export_csv(session: Session = Depends(get_session)):
