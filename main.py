@@ -14,6 +14,15 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, filters, ContextTypes
+from sqlmodel import create_engine
+
+# Use DATABASE_URL from .env
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///patients.db")
+
+# For pg8000 (works with Render Postgres)
+# Example: postgresql+pg8000://username:password@host:port/dbname
+engine = create_engine(DATABASE_URL, echo=True)
+
 
 # -------------------- Logging --------------------
 logging.basicConfig(level=logging.INFO)
