@@ -300,6 +300,15 @@ def export_csv(session: Session = Depends(get_session)):
     output.seek(0)
     return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=patients.csv"})
 
+# Temporary endpoint to create admin user
+@app.get("/create-admin")
+def create_admin(session: Session = Depends(get_session)):
+    password_hash = hashlib.sha256("admin123".encode('utf-8')).hexdigest()
+    default_user = UserDB(username="admin", password_hash=password_hash)
+    session.add(default_user)
+    session.commit()
+    return {"message": "Admin user created"}
+
 # Dashboard setup
 templates = Jinja2Templates(directory="templates")
 
