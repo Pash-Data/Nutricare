@@ -51,11 +51,15 @@ def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         if not session.exec(select(UserDB)).first():
-            default_user = UserDB(username="admin", password_hash=hashlib.sha256("admin123".encode()).hexdigest())
+            default_password = "admin123"
+            password_hash = hashlib.sha256(default_password.encode()).hexdigest()
+            print(f"Creating user 'admin' with password hash: {password_hash}")
+            default_user = UserDB(username="admin", password_hash=password_hash)
             session.add(default_user)
             session.commit()
-            print("Default user 'admin' created.")
-
+            print("Default user 'admin' created successfully.")
+        else:
+            print("User already exists, skipping creation.")
 create_db_and_tables()
 
 # Dependency for DB session (new)
