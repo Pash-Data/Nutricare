@@ -14,7 +14,6 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Ad
 
 load_dotenv()
 
-import os
 # Check if running in Alembic environment to avoid token requirement during migrations
 if "ALEMBIC" not in os.environ:
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -25,7 +24,7 @@ else:
 DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
 
 # SQLAlchemy/SQLModel setup (new)
-engine = create_engine(DATABASE_URL, echo=True)  # echo=True for debug (remove in prod)
+engine = create_engine(DATABASE_URL, echo=True)  
 
 # SQLModel for Patient table (new - this is PatientDB)
 class PatientDB(SQLModel, table=True):
@@ -292,3 +291,30 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
 async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session)):
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
+
+# Authentication Routes
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login")
+async def login(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    user = session.exec(select(UserDB).where(UserDB.username == username, UserDB.password_hash == password_hash)).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    response = RedirectResponse(url="/dashboard", status_code=303)
+    response.set_cookie(key="auth", value=username, httponly=True)  # Simple auth cookie
+    return response
+
+@app.get("/logout")
+async def logout(response: RedirectResponse = RedirectResponse(url="/login", status_code=303)):
+    response.delete_cookie("auth")
+    return response
+
+if __name__ == "__main__":
+    import uvicorn
+    # Run FastAPI in the main thread
+    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=True)
+    server = uvicorn.Server(config)
+    server.run()
