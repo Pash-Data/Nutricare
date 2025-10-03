@@ -314,13 +314,16 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, session: Session = Depends(get_session), current_user: UserDB = Depends(get_current_user)):
+    print(f"Accessing dashboard for user: {current_user.username}")  # Debug
     patients = session.exec(select(PatientDB)).all()
+    print(f"Patients count: {len(patients)}")  # Debug
     summary = {
         "total": len(patients),
         "sam": sum(1 for p in patients if p.nutrition_status == "SAM"),
         "mam": sum(1 for p in patients if p.nutrition_status == "MAM"),
         "normal": sum(1 for p in patients if p.nutrition_status == "Normal")
     }
+    print(f"Summary: {summary}")  # Debug
     return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary, "username": current_user.username})
 
 @app.post("/dashboard/add")
