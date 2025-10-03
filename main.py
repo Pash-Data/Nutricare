@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import List
+from typing import List Optional
 from fastapi.middleware.cors import CORSMiddleware
 import csv
 import io
@@ -25,6 +25,12 @@ DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to
 
 # SQLAlchemy/SQLModel setup (new)
 engine = create_engine(DATABASE_URL, echo=True)  
+
+# Database models
+class UserDB(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(index=True, unique=True)
+    password_hash: str
 
 # SQLModel for Patient table (new - this is PatientDB)
 class PatientDB(SQLModel, table=True):
