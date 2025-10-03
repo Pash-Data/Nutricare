@@ -36,17 +36,13 @@
         .export-btn:hover { background: #059669; }
         .toggle-btn { background: #64748b; color: white; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
         .toggle-btn:hover { background: #475569; }
-        .logout-btn { background: #ef4444; color: white; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; margin-left: 10px; }
-        .logout-btn:hover { background: #dc2626; }
-        .user-info { text-align: right; margin-bottom: 20px; font-weight: 500; color: #1e293b; }
         @media (max-width: 768px) { body { padding: 10px; } h1 { font-size: 2rem; } form { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
     <div class="container">
         <h1><i class="fas fa-heartbeat"></i> NutriCare Dashboard</h1>
-        <div class="user-info">Welcome, {{ username }} <form action="/logout" method="get" style="display:inline;"><button type="submit" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</button></form></div>
-
+        
         <div class="card">
             <h2><i class="fas fa-user-plus"></i> Register a Child</h2>
             <form action="/dashboard/add" method="post">
