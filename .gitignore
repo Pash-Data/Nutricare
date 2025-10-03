@@ -40,6 +40,3 @@ dist/
 # Python packaging
 *.egg-info/
 *.egg
-
-# MacOS
-*.DS_Store
