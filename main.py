@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List
@@ -273,11 +273,11 @@ def export_csv(session: Session = Depends(get_session)):
     output.seek(0)
     return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=patients.csv"})
 
-# Dashboard setup (updated for DB)
+# Dashboard setup
 templates = Jinja2Templates(directory="templates")
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, session: Session = Depends(get_session)):
+async def dashboard(request: Request, session: Session = Depends(get_session), current_user: UserDB = Depends(get_current_user)):
     patients = session.exec(select(PatientDB)).all()
     summary = {
         "total": len(patients),
@@ -285,14 +285,13 @@ async def dashboard(request: Request, session: Session = Depends(get_session)):
         "mam": sum(1 for p in patients if p.nutrition_status == "MAM"),
         "normal": sum(1 for p in patients if p.nutrition_status == "Normal")
     }
-    return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary})
+    return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary, "username": current_user.username})
 
 @app.post("/dashboard/add")
-async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session)):
+async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session), current_user: UserDB = Depends(get_current_user)):
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
 
-# Authentication Routes
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
@@ -304,17 +303,17 @@ async def login(request: Request, username: str = Form(...), password: str = For
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     response = RedirectResponse(url="/dashboard", status_code=303)
-    response.set_cookie(key="auth", value=username, httponly=True)  # Simple auth cookie
+    response.set_cookie(key="auth", value=username, httponly=True)
     return response
 
 @app.get("/logout")
-async def logout(response: RedirectResponse = RedirectResponse(url="/login", status_code=303)):
+async def logout():
+    response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie("auth")
     return response
 
 if __name__ == "__main__":
     import uvicorn
-    # Run FastAPI in the main thread
     config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=True)
     server = uvicorn.Server(config)
     server.run()
