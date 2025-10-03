@@ -334,12 +334,22 @@ async def login_page(request: Request):
 
 @app.post("/login")
 async def login(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    user = session.exec(select(UserDB).where(UserDB.username == username, UserDB.password_hash == password_hash)).first()
+    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    print(f"Login attempt for {username} with hash: {password_hash}")  # Debug
+    user = session.exec(select(UserDB).where(UserDB.username == username)).first()
     if not user:
+        print("No user found, creating new user...")
+        new_user = UserDB(username=username, password_hash=password_hash)
+        session.add(new_user)
+        session.commit()
+        print(f"New user {username} created successfully.")
+        user = new_user
+    elif user.password_hash != password_hash:
+        print("Password mismatch.")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     response = RedirectResponse(url="/dashboard", status_code=303)
     response.set_cookie(key="auth", value=username, httponly=True)
+    print("Login successful.")
     return response
 
 @app.get("/logout")
