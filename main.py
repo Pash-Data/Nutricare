@@ -62,21 +62,6 @@ def create_db_and_tables():
         else:
             print(f"User already exists: {existing_user.username}")
 
-# ... (rest of the file unchanged until /login)
-
-@app.post("/login")
-async def login(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
-    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()  # Enforce UTF-8
-    print(f"Login attempt for {username} with hash: {password_hash}")  # Debug
-    user = session.exec(select(UserDB).where(UserDB.username == username, UserDB.password_hash == password_hash)).first()
-    if not user:
-        print("No matching user found.")  # Debug
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    response = RedirectResponse(url="/dashboard", status_code=303)
-    response.set_cookie(key="auth", value=username, httponly=True)
-    print("Login successful.")  # Debug
-    return response
-
 # Dependency for DB session (new)
 def get_session():
     with Session(engine) as session:
