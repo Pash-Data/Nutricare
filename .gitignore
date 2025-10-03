@@ -41,5 +41,5 @@ dist/
 *.egg-info/
 *.egg
 
-# Templates directory
-templates/
+# MacOS
+*.DS_Store
