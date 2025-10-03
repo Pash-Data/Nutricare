@@ -1,38 +1,26 @@
 from dotenv import load_dotenv
 import os
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import List, Optional  # Fixed from List Optional
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 import csv
 import io
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
-from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Add for DB
-import hashlib
+from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
 
 load_dotenv()
 
 # Check if running in Alembic environment to avoid token requirement during migrations
 if "ALEMBIC" not in os.environ:
-    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-    
+    DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
 else:
-    TELEGRAM_TOKEN = None  # Placeholder for Alembic context
-DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
+    DATABASE_URL = "sqlite:///patients.db"  # Default for Alembic
+# SQLAlchemy/SQLModel setup
+engine = create_engine(DATABASE_URL, echo=True)  # echo=True for debug (remove in prod)
 
-# SQLAlchemy/SQLModel setup (new)
-engine = create_engine(DATABASE_URL, echo=True)  
-
-# Database models
-class UserDB(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    username: str = Field(index=True, unique=True)
-    password_hash: str
-
-# SQLModel for Patient table (new - this is PatientDB)
+# SQLModel for Patient table
 class PatientDB(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True)
@@ -45,37 +33,16 @@ class PatientDB(SQLModel, table=True):
     nutrition_status: str
     recommendation: str = Field(sa_column=Text)
 
-# Create DB and tables on startup (new)
+# Create DB and tables on startup
 def create_db_and_tables():
-    print("Creating tables and default user...")
     SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        existing_user = session.exec(select(UserDB)).first()
-        if not existing_user:
-            default_password = "admin123"
-            password_hash = hashlib.sha256(default_password.encode('utf-8')).hexdigest()
-            print(f"Creating user 'admin' with password hash: {password_hash}")
-            default_user = UserDB(username="admin", password_hash=password_hash)
-            session.add(default_user)
-            session.commit()
-            print("Default user 'admin' created successfully.")
-        else:
-            print(f"User already exists: {existing_user.username}")
 
-# Dependency for DB session (new)
+create_db_and_tables()
+
+# Dependency for DB session
 def get_session():
     with Session(engine) as session:
         yield session
-
-# Authentication dependency
-def get_current_user(session: Session = Depends(get_session), auth_cookie: str = None):
-    if not auth_cookie:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    username = auth_cookie
-    user = session.exec(select(UserDB).where(UserDB.username == username)).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid user")
-    return user
 
 app = FastAPI()
 
@@ -86,10 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Setup Telegram Application for webhooks
-application = Application.builder().token(TELEGRAM_TOKEN).build()
-
-# Pydantic models (unchanged)
+# Pydantic models
 class Patient(BaseModel):
     name: str
     age: int
@@ -104,7 +68,7 @@ class PatientResponse(Patient):
     nutrition_status: str
     recommendation: str
 
-# Utility functions (unchanged)
+# Utility functions
 def calculate_bmi(weight, height):
     height_m = height / 100
     return round(weight / (height_m ** 2), 2)
@@ -121,151 +85,40 @@ def classify_build(bmi):
     else:
         return "Obese"
 
-def classify_muac(muac):
-    if muac < 115:
-        return "SAM"
-    elif muac < 125:
-        return "MAM"
-    else:
-        return "Normal"
+def classify_muac(muac, age):
+    if age <= 5:  # WHO standards for children 0-5 years
+        if muac < 115:  # <11.5 cm
+            return "SAM (Severe Acute Malnutrition)"
+        elif muac < 125:  # 11.5-12.5 cm
+            return "MAM (Moderate Acute Malnutrition)"
+        else:  # >12.5 cm
+            return "Normal"
+    else:  # Original logic for ages >5
+        if muac < 115:
+            return "SAM"
+        elif muac < 125:
+            return "MAM"
+        else:
+            return "Normal"
 
 def get_recommendation(nutrition_status):
-    if nutrition_status == "SAM":
+    if "SAM" in nutrition_status:
         return "Severe Acute Malnutrition - Immediate referral to therapeutic feeding program, medical evaluation, and supplementary feeding."
-    elif nutrition_status == "MAM":
+    elif "MAM" in nutrition_status:
         return "Moderate Acute Malnutrition - Provide supplementary feeding, monitor closely, and educate on balanced diet."
     else:
         return "Normal - Maintain healthy diet and regular check-ups."
 
-# Bot handlers (updated for DB)
-NAME, AGE, WEIGHT, HEIGHT, MUAC = range(5)
-
-async def start(update: Update, context: CallbackContext) -> None:
-    await update.message.reply_text('Welcome to NutriCare Bot! Use /add to add a patient or /list to view patients.')
-
-async def add_patient(update: Update, context: CallbackContext) -> int:
-    await update.message.reply_text('Enter patient name:')
-    return NAME
-
-async def name(update: Update, context: CallbackContext) -> int:
-    context.user_data['name'] = update.message.text
-    await update.message.reply_text('Enter age:')
-    return AGE
-
-async def age(update: Update, context: CallbackContext) -> int:
-    try:
-        context.user_data['age'] = int(update.message.text)
-    except ValueError:
-        await update.message.reply_text('Invalid age. Enter a number:')
-        return AGE
-    await update.message.reply_text('Enter weight in kg:')
-    return WEIGHT
-
-async def weight(update: Update, context: CallbackContext) -> int:
-    try:
-        context.user_data['weight'] = float(update.message.text)
-    except ValueError:
-        await update.message.reply_text('Invalid weight. Enter a number:')
-        return WEIGHT
-    await update.message.reply_text('Enter height in cm:')
-    return HEIGHT
-
-async def height(update: Update, context: CallbackContext) -> int:
-    try:
-        context.user_data['height'] = float(update.message.text)
-    except ValueError:
-        await update.message.reply_text('Invalid height. Enter a number:')
-        return HEIGHT
-    await update.message.reply_text('Enter MUAC in mm:')
-    return MUAC
-
-async def muac(update: Update, context: CallbackContext) -> int:
-    try:
-        context.user_data['muac'] = float(update.message.text)
-    except ValueError:
-        await update.message.reply_text('Invalid MUAC. Enter a number:')
-        return MUAC
-
-    data = context.user_data
-    bmi = calculate_bmi(data['weight'], data['height'])
-    build = classify_build(bmi)
-    nutrition_status = classify_muac(data['muac'])
-    recommendation = get_recommendation(nutrition_status)
-
-    feedback = f"Patient: {data['name']}, Age: {data['age']}\nBMI: {bmi} ({build})\nNutrition: {nutrition_status}\nRecommendation: {recommendation}"
-    await update.message.reply_text(feedback)
-
-    # Add to DB (updated)
-    patient_db = PatientDB(
-        name=data['name'],
-        age=data['age'],
-        weight_kg=data['weight'],
-        height_cm=data['height'],
-        muac_mm=data['muac'],
-        bmi=bmi,
-        build=build,
-        nutrition_status=nutrition_status,
-        recommendation=recommendation
-    )
-    with Session(engine) as session:
-        session.add(patient_db)
-        session.commit()
-    await update.message.reply_text('Patient added to database!')
-
-    context.user_data.clear()
-    return ConversationHandler.END
-
-async def cancel(update: Update, context: CallbackContext) -> int:
-    await update.message.reply_text('Operation cancelled.')
-    context.user_data.clear()
-    return ConversationHandler.END
-
-async def list_patients(update: Update, context: CallbackContext) -> None:
-    with Session(engine) as session:
-        patients = session.exec(select(PatientDB)).all()
-    if not patients:
-        await update.message.reply_text('No patients in database.')
-        return
-    msg = "Patients:\n"
-    for p in patients:
-        msg += f"{p.name}: BMI {p.bmi} ({p.build}), Nutrition: {p.nutrition_status}, Rec: {p.recommendation[:50]}...\n"
-    await update.message.reply_text(msg)
-
-# Setup bot handlers (unchanged)
-conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('add', add_patient)],
-    states={
-        NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
-        AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, age)],
-        WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, weight)],
-        HEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, height)],
-        MUAC: [MessageHandler(filters.TEXT & ~filters.COMMAND, muac)],
-    },
-    fallbacks=[CommandHandler('cancel', cancel)],
-)
-
-application.add_handler(CommandHandler('start', start))
-application.add_handler(CommandHandler('list', list_patients))
-application.add_handler(conv_handler)
-
-# Webhook endpoint (unchanged)
-@app.post(f"/webhook/{TELEGRAM_TOKEN}")
-async def webhook(request: Request):
-    json_data = await request.json()
-    update = Update.de_json(json_data, application.bot)
-    await application.process_update(update)
-    return {"ok": True}
-
-# API Routes (updated for DB)
+# API Routes
 @app.get("/")
 def root():
-    return {"message": "Nutricare API is running!"}
+    return {"message": "Nutricare Web API is running!"}
 
 @app.post("/patients", response_model=PatientResponse)
 def add_patient_api(patient: Patient, session: Session = Depends(get_session)):
     bmi = calculate_bmi(patient.weight_kg, patient.height_cm)
     build = classify_build(bmi)
-    nutrition_status = classify_muac(patient.muac_mm)
+    nutrition_status = classify_muac(patient.muac_mm, patient.age)
     recommendation = get_recommendation(nutrition_status)
 
     db_patient = PatientDB(
@@ -300,69 +153,28 @@ def export_csv(session: Session = Depends(get_session)):
     output.seek(0)
     return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=patients.csv"})
 
-# Temporary endpoint to create admin user
-@app.get("/create-admin")
-def create_admin(session: Session = Depends(get_session)):
-    password_hash = hashlib.sha256("admin123".encode('utf-8')).hexdigest()
-    default_user = UserDB(username="admin", password_hash=password_hash)
-    session.add(default_user)
-    session.commit()
-    return {"message": "Admin user created"}
-
 # Dashboard setup
 templates = Jinja2Templates(directory="templates")
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, session: Session = Depends(get_session), current_user: UserDB = Depends(get_current_user)):
-    print(f"Accessing dashboard for user: {current_user.username}")  # Debug
+async def dashboard(request: Request, session: Session = Depends(get_session)):
     patients = session.exec(select(PatientDB)).all()
-    print(f"Patients count: {len(patients)}")  # Debug
     summary = {
         "total": len(patients),
-        "sam": sum(1 for p in patients if p.nutrition_status == "SAM"),
-        "mam": sum(1 for p in patients if p.nutrition_status == "MAM"),
-        "normal": sum(1 for p in patients if p.nutrition_status == "Normal")
+        "sam": sum(1 for p in patients if "SAM" in p.nutrition_status),
+        "mam": sum(1 for p in patients if "MAM" in p.nutrition_status),
+        "normal": sum(1 for p in patients if "Normal" in p.nutrition_status)
     }
-    print(f"Summary: {summary}")  # Debug
-    return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary, "username": current_user.username})
+    return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary})
 
 @app.post("/dashboard/add")
-async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session), current_user: UserDB = Depends(get_current_user)):
+async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session)):
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
     return add_patient_api(patient, session)
 
-@app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
-
-@app.post("/login")
-async def login(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
-    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-    print(f"Login attempt for {username} with hash: {password_hash}")  # Debug
-    user = session.exec(select(UserDB).where(UserDB.username == username)).first()
-    if not user:
-        print("No user found, creating new user...")
-        new_user = UserDB(username=username, password_hash=password_hash)
-        session.add(new_user)
-        session.commit()
-        print(f"New user {username} created successfully.")
-        user = new_user
-    elif user.password_hash != password_hash:
-        print("Password mismatch.")
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    response = RedirectResponse(url="/dashboard", status_code=303)
-    response.set_cookie(key="auth", value=username, httponly=True)
-    print("Login successful.")
-    return response
-
-@app.get("/logout")
-async def logout():
-    response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie("auth")
-    return response
-
 if __name__ == "__main__":
     import uvicorn
+    # Run FastAPI in the main thread
     config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=True)
     server = uvicorn.Server(config)
     server.run()
