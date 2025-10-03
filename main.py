@@ -50,6 +50,16 @@ def get_session():
     with Session(engine) as session:
         yield session
 
+# Authentication dependency
+def get_current_user(session: Session = Depends(get_session), auth_cookie: str = None):
+    if not auth_cookie:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    username = auth_cookie
+    user = session.exec(select(UserDB).where(UserDB.username == username)).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user")
+    return user
+
 app = FastAPI()
 
 app.add_middleware(
