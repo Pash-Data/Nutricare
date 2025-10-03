@@ -11,14 +11,14 @@ import io
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
 from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Add for DB
+import hashlib
 
 load_dotenv()
 
 # Check if running in Alembic environment to avoid token requirement during migrations
 if "ALEMBIC" not in os.environ:
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-    if not TELEGRAM_TOKEN:
-        raise ValueError("TELEGRAM_TOKEN not set in environment")
+    
 else:
     TELEGRAM_TOKEN = None  # Placeholder for Alembic context
 DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
