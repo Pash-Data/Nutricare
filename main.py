@@ -47,7 +47,14 @@ class PatientDB(SQLModel, table=True):
 
 # Create DB and tables on startup (new)
 def create_db_and_tables():
+    print("Creating tables and default user...")
     SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        if not session.exec(select(UserDB)).first():
+            default_user = UserDB(username="admin", password_hash=hashlib.sha256("admin123".encode()).hexdigest())
+            session.add(default_user)
+            session.commit()
+            print("Default user 'admin' created.")
 
 create_db_and_tables()
 
