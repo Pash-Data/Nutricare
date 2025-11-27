@@ -1,14 +1,18 @@
 from dotenv import load_dotenv
 import os
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 import csv
 import io
-from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
+from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Add for DB
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import hashlib
 
 load_dotenv()
 
