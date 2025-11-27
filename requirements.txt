@@ -5,7 +5,3 @@ python-telegram-bot==21.4
 requests
 jinja2
 python-multipart
-psycopg2-binary # PostgreSQL adapter
-sqlalchemy       # ORM for Python
-sqlmodel==0.0.12
-
