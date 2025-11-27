@@ -1,66 +1,31 @@
-from dotenv import load_dotenv
-import os
-from fastapi import FastAPI, Request, Form, Depends, HTTPException
+from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import List
-from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict
 import csv
 import io
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext
-from sqlmodel import Field, Session, SQLModel, create_engine, select, Text  # Add for DB
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-import hashlib
+import os
+from dotenv import load_dotenv
+import asyncio
+
+# Telegram Bot
+from telegram import Update, BotCommand
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 load_dotenv()
 
-# Get Supabase DATABASE_URL from Render environment
-DATABASE_URL = os.getenv("DATABASE_URL")
+# === CONFIG ===
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not TELEGRAM_TOKEN:
+    print("WARNING: TELEGRAM_TOKEN not set — bot will not start")
 
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL is not set in Render environment variables!")
+# In-memory storage (replaces database)
+patients: List[Dict] = []
 
-# Supabase gives postgres:// → SQLModel/SQLAlchemy needs postgresql://
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-# Create engine
-engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
-
-# SQLModel for Patient table
-class PatientDB(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(index=True)
-    age: int
-    weight_kg: float
-    height_cm: float
-    muac_mm: float
-    bmi: float
-    build: str
-    nutrition_status: str
-    recommendation: str = Field(sa_column=Text)
-
-# Create DB and tables on startup
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
-
-create_db_and_tables()
-
-# Dependency for DB session
-def get_session():
-    with Session(engine) as session:
-        yield session
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# FastAPI app
+app = FastAPI(title="NutriCare")
+templates = Jinja2Templates(directory="templates")
 
 # Pydantic models
 class Patient(BaseModel):
@@ -71,119 +36,162 @@ class Patient(BaseModel):
     muac_mm: float
 
 class PatientResponse(Patient):
-    id: int | None = None
+    id: int
     bmi: float
     build: str
     nutrition_status: str
     recommendation: str
 
-# Utility functions
+# === CALCULATION FUNCTIONS ===
 def calculate_bmi(weight, height):
-    height_m = height / 100
-    return round(weight / (height_m ** 2), 2)
+    return round(weight / ((height / 100) ** 2), 2)
 
 def classify_build(bmi):
-    if bmi < 16:
-        return "Severely underweight"
-    elif bmi < 18.5:
-        return "Underweight"
-    elif bmi < 25:
-        return "Normal"
-    elif bmi < 30:
-        return "Overweight"
-    else:
-        return "Obese"
+    if bmi < 16: return "Severely underweight"
+    elif bmi < 18.5: return "Underweight"
+    elif bmi < 25: return "Normal"
+    elif bmi < 30: return "Overweight"
+    else: return "Obese"
 
 def classify_muac(muac, age):
-    if age <= 5:  # WHO standards for children 0-5 years
-        if muac < 115:  # <11.5 cm
-            return "SAM (Severe Acute Malnutrition)"
-        elif muac < 125:  # 11.5-12.5 cm
-            return "MAM (Moderate Acute Malnutrition)"
-        else:  # >12.5 cm
-            return "Normal"
-    else:  # Original logic for ages >5
-        if muac < 115:
-            return "SAM"
-        elif muac < 125:
-            return "MAM"
-        else:
-            return "Normal"
-
-def get_recommendation(nutrition_status):
-    if "SAM" in nutrition_status:
-        return "Severe Acute Malnutrition - Immediate referral to therapeutic feeding program, medical evaluation, and supplementary feeding."
-    elif "MAM" in nutrition_status:
-        return "Moderate Acute Malnutrition - Provide supplementary feeding, monitor closely, and educate on balanced diet."
+    if age <= 5:
+        if muac < 115: return "SAM (Severe Acute Malnutrition)"
+        elif muac < 125: return "MAM (Moderate Acute Malnutrition)"
+        else: return "Normal"
     else:
-        return "Normal - Maintain healthy diet and regular check-ups."
+        if muac < 115: return "SAM"
+        elif muac < 125: return "MAM"
+        else: return "Normal"
 
-# API Routes
-@app.get("/")
-def root():
-    return {"message": "Nutricare Web API is running!"}
+def get_recommendation(status):
+    if "SAM" in status:
+        return "URGENT: Severe Acute Malnutrition — Refer to therapeutic feeding immediately."
+    elif "MAM" in status:
+        return "Moderate Acute Malnutrition — Provide supplementary food and monitoring."
+    else:
+        return "Normal — Continue healthy diet and regular check-ups."
+
+# === FASTAPI ROUTES ===
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "patients": patients,
+        "summary": {
+            "total": len(patients),
+            "sam": sum(1 for p in patients if "SAM" in p["nutrition_status"]),
+            "mam": sum(1 for p in patients if "MAM" in p["nutrition_status"]),
+            "normal": sum(1 for p in patients if "Normal" in p["nutrition_status"])
+        }
+    })
 
 @app.post("/patients", response_model=PatientResponse)
-def add_patient_api(patient: Patient, session: Session = Depends(get_session)):
+def add_patient(patient: Patient):
     bmi = calculate_bmi(patient.weight_kg, patient.height_cm)
     build = classify_build(bmi)
-    nutrition_status = classify_muac(patient.muac_mm, patient.age)
-    recommendation = get_recommendation(nutrition_status)
+    status = classify_muac(patient.muac_mm, patient.age)
+    recommendation = get_recommendation(status)
 
-    db_patient = PatientDB(
-        name=patient.name,
-        age=patient.age,
-        weight_kg=patient.weight_kg,
-        height_cm=patient.height_cm,
-        muac_mm=patient.muac_mm,
-        bmi=bmi,
-        build=build,
-        nutrition_status=nutrition_status,
-        recommendation=recommendation
-    )
-    session.add(db_patient)
-    session.commit()
-    session.refresh(db_patient)
-    return PatientResponse(id=db_patient.id, **db_patient.dict(exclude={'id'}))
-
-@app.get("/patients", response_model=List[PatientResponse])
-def get_patients(session: Session = Depends(get_session)):
-    patients = session.exec(select(PatientDB)).all()
-    return [PatientResponse(id=p.id, **p.dict(exclude={'id'})) for p in patients]
+    new_patient = {
+        "id": len(patients) + 1,
+        "name": patient.name,
+        "age": patient.age,
+        "weight_kg": patient.weight_kg,
+        "height_cm": patient.height_cm,
+        "muac_mm": patient.muac_mm,
+        "bmi": bmi,
+        "build": build,
+        "nutrition_status": status,
+        "recommendation": recommendation
+    }
+    patients.append(new_patient)
+    return PatientResponse(**new_patient)
 
 @app.get("/export")
-def export_csv(session: Session = Depends(get_session)):
-    patients = session.exec(select(PatientDB)).all()
+def export_csv():
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["id", "name", "age", "weight_kg", "height_cm", "muac_mm", "bmi", "build", "nutrition_status", "recommendation"])
+    writer.writerow(["ID", "Name", "Age", "Weight(kg)", "Height(cm)", "MUAC(mm)", "BMI", "Build", "Status", "Recommendation"])
     for p in patients:
-        writer.writerow([p.id, p.name, p.age, p.weight_kg, p.height_cm, p.muac_mm, p.bmi, p.build, p.nutrition_status, p.recommendation])
+        writer.writerow([p["id"], p["name"], p["age"], p["weight_kg"], p["height_cm"], p["muac_mm"], p["bmi"], p["build"], p["nutrition_status"], p["recommendation"]])
     output.seek(0)
-    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=patients.csv"})
+    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=nutricare_patients.csv"})
 
-# Dashboard setup
-templates = Jinja2Templates(directory="templates")
+# === TELEGRAM BOT ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "NutriCare Bot Active!\n"
+        "Send patient data in this format:\n\n"
+        "Name: John Doe\nAge: 4\nWeight: 12.5\nHeight: 95\nMUAC: 118"
+    )
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, session: Session = Depends(get_session)):
-    patients = session.exec(select(PatientDB)).all()
-    summary = {
-        "total": len(patients),
-        "sam": sum(1 for p in patients if "SAM" in p.nutrition_status),
-        "mam": sum(1 for p in patients if "MAM" in p.nutrition_status),
-        "normal": sum(1 for p in patients if "Normal" in p.nutrition_status)
-    }
-    return templates.TemplateResponse("dashboard.html", {"request": request, "patients": patients, "summary": summary})
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Send patient details — I'll analyze instantly!")
 
-@app.post("/dashboard/add")
-async def add_from_dashboard(name: str = Form(...), age: int = Form(...), weight_kg: float = Form(...), height_cm: float = Form(...), muac_mm: float = Form(...), session: Session = Depends(get_session)):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    try:
+        lines = [l.strip() for l in text.split("\n") if ":" in l]
+        data = {}
+        for line in lines:
+            key, value = line.split(":", 1)
+            key = key.strip().lower()
+            value = value.strip()
+            if "name" in key: data["name"] = value
+            elif "age" in key: data["age"] = int(value)
+            elif "weight" in key: data["weight_kg"] = float(value)
+            elif "height" in key: data["height_cm"] = float(value)
+            elif "muac" in key: data["muac_mm"] = float(value)
+
+        if len(data) != 5:
+            await update.message.reply_text("Please provide all: Name, Age, Weight, Height, MUAC")
+            return
+
+        patient = Patient(**data)
+        result = add_patient(patient)
+
+        response = (
+            f"*{result.name}* ({result.age} years)\n\n"
+            f"BMI: {result.bmi} → *{result.build}*\n"
+            f"MUAC: {result.muac_mm} mm → *{result.nutrition_status}*\n\n"
+            f"*{result.recommendation}*"
+        )
+        await update.message.reply_text(response, parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text(f"Error: {str(e)}\nSend data correctly.")
+
+# Start Telegram bot in background
+if TELEGRAM_TOKEN:
+    app_bot = Application.builder().token(TELEGRAM_TOKEN).build()
+    app_bot.add_handler(CommandHandler("start", start))
+    app_bot.add_handler(CommandHandler("help", help_command))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    async def run_bot():
+        await app_bot.initialize()
+        await app_bot.start()
+        await app_bot.updater.start_polling()
+        print("Telegram bot started!")
+        while True:
+            await asyncio.sleep(3600)
+
+    # Run bot in background
+    @app.on_event("startup")
+    async def startup_event():
+        asyncio.create_task(run_bot())
+
+else:
+    print("No TELEGRAM_TOKEN — bot disabled")
+
+# === HTML FORM POST ===
+@app.post("/add")
+async def add_from_form(
+    name: str = Form(...),
+    age: int = Form(...),
+    weight_kg: float = Form(...),
+    height_cm: float = Form(...),
+    muac_mm: float = Form(...)
+):
     patient = Patient(name=name, age=age, weight_kg=weight_kg, height_cm=height_cm, muac_mm=muac_mm)
-    return add_patient_api(patient, session)
-
-if __name__ == "__main__":
-    import uvicorn
-    # Run FastAPI in the main thread
-    config = uvicorn.Config("main:app", host="0.0.0.0", port=8000, reload=True)
-    server = uvicorn.Server(config)
-    server.run()
+    add_patient(patient)
+    return {"success": True, "message": "Patient added!"}
