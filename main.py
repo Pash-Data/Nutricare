@@ -12,17 +12,17 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select, Text
 
 load_dotenv()
 
-# Check if running in Alembic environment to avoid token requirement during migrations
-if "ALEMBIC" not in os.environ:
-# Use Supabase URL directly – Render will overwrite it anyway
-DATABASE_URL = os.getenv("DATABASE_URL")  # Supabase gives you this
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL not set – check Render environment variables")
+# Get Supabase DATABASE_URL from Render environment
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Supabase gives postgres:// – SQLModel needs postgresql://
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set in Render environment variables!")
+
+# Supabase gives postgres:// → SQLModel/SQLAlchemy needs postgresql://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Create engine
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 
 # SQLModel for Patient table
