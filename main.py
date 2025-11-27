@@ -14,11 +14,16 @@ load_dotenv()
 
 # Check if running in Alembic environment to avoid token requirement during migrations
 if "ALEMBIC" not in os.environ:
-    DATABASE_URL = os.getenv('DATABASE_URL', "sqlite:///patients.db")  # Fallback to SQLite for local
-else:
-    DATABASE_URL = "sqlite:///patients.db"  # Default for Alembic
-# SQLAlchemy/SQLModel setup
-engine = create_engine(DATABASE_URL, echo=True)  # echo=True for debug (remove in prod)
+# Use Supabase URL directly – Render will overwrite it anyway
+DATABASE_URL = os.getenv("DATABASE_URL")  # Supabase gives you this
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL not set – check Render environment variables")
+
+# Supabase gives postgres:// – SQLModel needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 
 # SQLModel for Patient table
 class PatientDB(SQLModel, table=True):
