@@ -73,16 +73,17 @@ def get_recommendation(status):
 
 # === FASTAPI ROUTES ===
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
+async def dashboard(request: Request):
+    summary = {
+        "total": len(patients),
+        "sam": sum(1 for p in patients if "SAM" in p["nutrition_status"]),
+        "mam": sum(1 for p in patients if "MAM" in p["nutrition_status"]),
+        "normal": sum(1 for p in patients if "Normal" in p["nutrition_status"])
+    }
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "patients": patients,
-        "summary": {
-            "total": len(patients),
-            "sam": sum(1 for p in patients if "SAM" in p["nutrition_status"]),
-            "mam": sum(1 for p in patients if "MAM" in p["nutrition_status"]),
-            "normal": sum(1 for p in patients if "Normal" in p["nutrition_status"])
-        }
+        "summary": summary
     })
 
 @app.post("/patients", response_model=PatientResponse)
