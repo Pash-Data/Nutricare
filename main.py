@@ -1,37 +1,26 @@
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+from fastapi.staticfiles import StaticFiles
 import csv
-import os
+from io import StringIO
 
 app = FastAPI()
 
-# Templates folder
 templates = Jinja2Templates(directory="templates")
 
-# Allow frontend + bot requests
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# In-memory data storage
+patients = []
 
-# In-memory database
-patients_db = []
+# ----- Helper Functions -----
 
-
-# Utility functions
 def calculate_bmi(weight, height):
-    h = height / 100
-    return round(weight / (h * h), 2)
+    height_m = height / 100
+    return round(weight / (height_m ** 2), 2)
 
 def classify_build(bmi):
     if bmi < 16:
-        return "Severely underweight"
+        return "Severely Underweight"
     elif bmi < 18.5:
         return "Underweight"
     elif bmi < 25:
@@ -47,68 +36,34 @@ def classify_muac(muac):
         return "MAM"
     return "Normal"
 
-def recommendation(status):
+def get_recommendation(status):
     if status == "SAM":
-        return "Urgent referral to stabilization center + therapeutic feeding."
-    elif status == "MAM":
-        return "Supplementary feeding + weekly monitoring."
-    else:
-        return "Maintain balanced diet, follow up in 4 weeks."
+        return "Urgent referral to stabilization center required."
+    if status == "MAM":
+        return "Provide supplementary feeding and follow-up."
+    return "Child is healthy. Continue normal growth monitoring."
 
 
-# API — add via JSON
-class Patient(BaseModel):
-    name: str
-    age: int
-    weight_kg: float
-    height_cm: float
-    muac_mm: float
-
-@app.post("/patients")
-def api_add_patient(patient: Patient):
-    bmi = calculate_bmi(patient.weight_kg, patient.height_cm)
-    build = classify_build(bmi)
-    status = classify_muac(patient.muac_mm)
-    rec = recommendation(status)
-
-    data = patient.dict()
-    data.update({
-        "bmi": bmi,
-        "build": build,
-        "nutrition_status": status,
-        "recommendation": rec
-    })
-
-    patients_db.append(data)
-    return {"status": "success", "data": data}
-
-
-@app.get("/patients", response_model=List[dict])
-def api_get_all():
-    return patients_db
-
-
-# ------------------------
-# DASHBOARD ROUTES (HTML)
-# ------------------------
-
+# ----- Dashboard Route -----
+@app.get("/", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     summary = {
-        "total": len(patients_db),
-        "sam": len([p for p in patients_db if p["nutrition_status"] == "SAM"]),
-        "mam": len([p for p in patients_db if p["nutrition_status"] == "MAM"]),
-        "normal": len([p for p in patients_db if p["nutrition_status"] == "Normal"])
+        "total": len(patients),
+        "sam": sum(1 for p in patients if p["nutrition_status"] == "SAM"),
+        "mam": sum(1 for p in patients if p["nutrition_status"] == "MAM"),
+        "normal": sum(1 for p in patients if p["nutrition_status"] == "Normal"),
     }
 
     return templates.TemplateResponse(
         "dashboard.html",
-        {"request": request, "patients": patients_db, "summary": summary}
+        {"request": request, "patients": patients, "summary": summary}
     )
 
 
+# ----- Add Patient -----
 @app.post("/dashboard/add")
-def dashboard_add(
+def add_patient(
     request: Request,
     name: str = Form(...),
     age: int = Form(...),
@@ -118,33 +73,37 @@ def dashboard_add(
 ):
     bmi = calculate_bmi(weight_kg, height_cm)
     build = classify_build(bmi)
-    status = classify_muac(muac_mm)
-    rec = recommendation(status)
+    nutrition = classify_muac(muac_mm)
+    recommendation = get_recommendation(nutrition)
 
-    data = {
+    patients.append({
         "name": name,
         "age": age,
-        "weight_kg": weight_kg,
-        "height_cm": height_cm,
-        "muac_mm": muac_mm,
+        "weight": weight_kg,
+        "height": height_cm,
+        "muac": muac_mm,
         "bmi": bmi,
         "build": build,
-        "nutrition_status": status,
-        "recommendation": rec
-    }
+        "nutrition_status": nutrition,
+        "recommendation": recommendation
+    })
 
-    patients_db.append(data)
-    return dashboard(request)  # reload page
+    return dashboard(request)
 
 
+# ----- Export CSV -----
 @app.get("/export")
 def export_csv():
-    filename = "patients.csv"
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Name", "Age", "BMI", "Build", "Nutrition", "Recommendation"])
 
-    with open(filename, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=patients_db[0].keys() if patients_db else [])
-        writer.writeheader()
-        for row in patients_db:
-            writer.writerow(row)
+    for p in patients:
+        writer.writerow([p["name"], p["age"], p["bmi"], p["build"], p["nutrition_status"], p["recommendation"]])
 
-    return FileResponse(filename, media_type="text/csv", filename=filename)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=patients.csv"}
+    )
