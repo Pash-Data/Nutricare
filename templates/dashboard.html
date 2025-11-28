@@ -4,150 +4,119 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NutriCare Dashboard</title>
-
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); color: #1e293b; line-height: 1.6; padding: 20px; min-height: 100vh; }
-        .container { max-width: 1200px; margin: 0 auto; animation: fadeIn 0.5s ease-in; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #f1f5f9; line-height: 1.6; padding: 20px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { text-align: center; color: #1d4ed8; margin-bottom: 30px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    form { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+    label { font-weight: 500; }
+    input { padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; }
+    button { padding: 12px 20px; background: #2563eb; color: white; border: none;
+             border-radius: 8px; cursor: pointer; margin-top: 10px; }
+    button:hover { background: #1e40af; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+    .stat-card { padding: 16px; border-radius: 8px; text-align: center; font-size: 1.2rem; }
+    .normal { background: #dcfce7; }
+    .mam { background: #fef3c7; }
+    .sam { background: #fecaca; }
+</style>
 
-        h1 { text-align: center; color: #1d4ed8; margin-bottom: 30px; font-size: 2.5rem; font-weight: 600; }
-        h2 { color: #334155; margin: 30px 0 20px; font-size: 1.5rem; font-weight: 500; }
-
-        .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        form { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px,1fr)); gap: 16px; }
-
-        label { font-weight: 500; color: #475569; margin-bottom: 4px; display: block; }
-        input[type="text"], input[type="number"] {
-            padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1rem;
-        }
-
-        button {
-            background: #3b82f6; color: white; padding: 12px 24px;
-            border: none; border-radius: 8px; cursor: pointer;
-            grid-column: 1 / -1; justify-self: center;
-        }
-
-        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
-        th { background: #f8fafc; font-weight: 600; color: #475569; }
-
-        .summary-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
-            gap: 16px; 
-        }
-        .stat-card { text-align: center; padding: 16px; border-radius: 8px; font-weight: 500; }
-        .normal { background: #dcfce7; color: #166534; }
-        .mam { background: #fef3c7; color: #92400e; }
-        .sam { background: #fecaca; color: #991b1b; }
-
-        #patients { display: none; }
-        .toggle-btn { background: #64748b; color: white; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; }
-    </style>
 </head>
-
 <body>
+
 <div class="container">
 
-    <h1><i class="fas fa-heartbeat"></i> NutriCare Dashboard</h1>
+    <h1>NutriCare Dashboard</h1>
 
-    <!-- Register child -->
+    <!-- REGISTER -->
     <div class="card">
-        <h2><i class="fas fa-user-plus"></i> Register a Child</h2>
-
+        <h2>Register a Child</h2>
         <form action="/dashboard/add" method="post">
             <div>
-                <label>Name:</label>
+                <label>Name</label>
                 <input type="text" name="name" required>
             </div>
-
             <div>
-                <label>Age:</label>
+                <label>Age</label>
                 <input type="number" name="age" required>
             </div>
-
             <div>
-                <label>Weight (kg):</label>
+                <label>Weight (kg)</label>
                 <input type="number" step="0.1" name="weight_kg" required>
             </div>
-
             <div>
-                <label>Height (cm):</label>
+                <label>Height (cm)</label>
                 <input type="number" step="0.1" name="height_cm" required>
             </div>
-
             <div>
-                <label>MUAC (mm):</label>
+                <label>MUAC (mm)</label>
                 <input type="number" step="0.1" name="muac_mm" required>
             </div>
-
-            <button type="submit"><i class="fas fa-save"></i> Register</button>
+            <button type="submit">Register</button>
         </form>
     </div>
 
-
-    <!-- Patients -->
+    <!-- PATIENT LIST -->
     <div class="card">
-        <h2><i class="fas fa-users"></i> Patients</h2>
-        <button class="toggle-btn" onclick="togglePatients()">Show Patients</button>
+        <h2>Registered Patients</h2>
 
-        <div id="patients">
-            <table>
-                <thead>
+        {% if patients %}
+        <table>
+            <thead>
                 <tr>
-                    <th>Name</th><th>Age</th><th>BMI</th>
-                    <th>Build</th><th>Nutrition Status</th>
+                    <th>Name</th>
+                    <th>Age</th>
+                    <th>BMI</th>
+                    <th>Build</th>
+                    <th>Nutrition</th>
+                    <th>Recommendation</th>
                 </tr>
-                </thead>
-                <tbody id="patientRows">
-                <!-- Filled by JavaScript -->
-                </tbody>
-            </table>
-        </div>
+            </thead>
+            <tbody>
+                {% for p in patients %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td>{{ p.age }}</td>
+                    <td>{{ p.bmi }}</td>
+                    <td>{{ p.build }}</td>
+                    <td class="{{ p.nutrition_status|lower }}">{{ p.nutrition_status }}</td>
+                    <td>{{ p.recommendation }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #6b7280;">No patients yet.</p>
+        {% endif %}
     </div>
 
-
-    <!-- Summary -->
+    <!-- SUMMARY -->
     <div class="card">
-        <h2><i class="fas fa-chart-bar"></i> Summary</h2>
+        <h2>Summary</h2>
         <div class="summary-grid">
-            <div class="stat-card normal">
-                <div id="total" style="font-size: 2rem;">0</div>
-                <div>Total Patients</div>
-            </div>
-            <div class="stat-card sam">
-                <div id="sam" style="font-size: 2rem;">0</div>
-                <div>SAM</div>
-            </div>
-            <div class="stat-card mam">
-                <div id="mam" style="font-size: 2rem;">0</div>
-                <div>MAM</div>
-            </div>
-            <div class="stat-card normal">
-                <div id="normal" style="font-size: 2rem;">0</div>
-                <div>Normal</div>
-            </div>
+            <div class="stat-card normal">Total: {{ summary.total }}</div>
+            <div class="stat-card sam">SAM: {{ summary.sam }}</div>
+            <div class="stat-card mam">MAM: {{ summary.mam }}</div>
+            <div class="stat-card normal">Normal: {{ summary.normal }}</div>
         </div>
     </div>
 
-    <!-- Export -->
     <div class="card">
-        <h2><i class="fas fa-download"></i> Export</h2>
-        <a href="/export" class="export-btn"><i class="fas fa-file-csv"></i> Download CSV</a>
+        <a href="/export" style="text-decoration:none;">
+            <button>Download CSV</button>
+        </a>
     </div>
 
 </div>
-
-<script>
-function togglePatients() {
-    const p = document.getElementById("patients");
-    p.style.display = p.style.display === "none" ? "block" : "none";
-}
-</script>
 
 </body>
 </html>
